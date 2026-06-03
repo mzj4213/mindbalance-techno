@@ -1,0 +1,6 @@
+{
+  "name": "MindBalance",
+  "description": "A minimalist, emotionally intelligent mental wellness and focus recovery platform featuring adaptive cognitive pacing.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
