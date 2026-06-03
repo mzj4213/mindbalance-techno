@@ -128,6 +128,24 @@ export default function TasksScreen({ tasks, setTasks }: TasksScreenProps) {
         
         {/* LHS Column: Filters, workload breakdown & insertion form */}
         <div className="lg:col-span-5 space-y-6">
+
+          {/* Flow Mastery */}
+          <section className="glass-card rounded-3xl p-6 space-y-4 animate-fade-in select-none">
+            <div className="flex justify-between items-center">
+              <span className="text-[9px] font-black uppercase tracking-widest text-[#006591]">Flow Mastery</span>
+            </div>
+            <p className="text-xs text-on-surface-variant leading-relaxed">
+              Intentions serve as critical pacing parameters. Click the <span className="font-extrabold text-primary">"+"</span> button to claim a new work node anytime.
+            </p>
+            <div className="border-t border-slate-100 pt-3 space-y-2">
+              <p className="text-[10px] font-extrabold uppercase text-outline">Category Keys</p>
+              <div className="flex flex-wrap gap-2 text-[9px] font-bold uppercase tracking-wider">
+                <span className="bg-orange-50 text-orange-700 px-2 py-1 rounded-md border border-orange-200/30">High budget (Severe stamina)</span>
+                <span className="bg-yellow-50 text-yellow-800 px-2 py-1 rounded-md border border-yellow-200/30">Med budget (Sustained stamina)</span>
+                <span className="bg-emerald-50 text-emerald-850 px-2 py-1 rounded-md border border-emerald-200/30">Low budget (Restorative stamina)</span>
+              </div>
+            </div>
+          </section>
           
           {/* Task Breakdown Indicators */}
           <section className="space-y-3">
@@ -208,7 +226,7 @@ export default function TasksScreen({ tasks, setTasks }: TasksScreenProps) {
           </section>
 
           {/* Task Insertion Form overlay styled with pure, light backgrounds */}
-          {showAdd ? (
+          {showAdd && (
             <form onSubmit={handleAddTask} className="bg-slate-50 border border-slate-200/60 p-5 rounded-3xl space-y-4 animate-fade-in select-none shadow-md">
               <div className="flex justify-between items-center pb-2 border-b border-outline-variant/10">
                 <h3 className="text-xs font-black text-primary uppercase tracking-widest">New Zen Intention</h3>
@@ -306,27 +324,6 @@ export default function TasksScreen({ tasks, setTasks }: TasksScreenProps) {
                 </button>
               </div>
             </form>
-          ) : (
-            /* Intention Statistics and motivation tips */
-            <section className="glass-card rounded-3xl p-6 space-y-4 animate-fade-in select-none">
-              <div className="flex justify-between items-center">
-                <span className="text-[9px] font-black uppercase tracking-widest text-[#006591]">Flow Mastery</span>
-                <span className="text-[8px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold">
-                  {tasks.filter(t => t.completed).length}/{tasks.length} Completed
-                </span>
-              </div>
-              <p className="text-xs text-on-surface-variant leading-relaxed">
-                Intentions serve as critical pacing parameters. Click the top-right <span className="font-extrabold text-primary">"+"</span> button to claiming a new work node anytime.
-              </p>
-              <div className="border-t border-slate-100 pt-3 space-y-2">
-                <p className="text-[10px] font-extrabold uppercase text-outline">Category Keys</p>
-                <div className="flex flex-wrap gap-2 text-[9px] font-bold uppercase tracking-wider">
-                  <span className="bg-orange-50 text-orange-700 px-2 py-1 rounded-md border border-orange-200/30">High budget (Severe stamina)</span>
-                  <span className="bg-yellow-50 text-yellow-800 px-2 py-1 rounded-md border border-yellow-200/30">Med budget (Sustained stamina)</span>
-                  <span className="bg-emerald-50 text-emerald-800 px-2 py-1 rounded-md border border-emerald-200/30">Low budget (Restorative stamina)</span>
-                </div>
-              </div>
-            </section>
           )}
 
         </div>

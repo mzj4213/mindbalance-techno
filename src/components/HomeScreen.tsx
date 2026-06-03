@@ -163,10 +163,6 @@ export default function HomeScreen({
           
           {/* Primary Daily Vibe Panel */}
           <section className="glass-card rounded-3xl p-6 space-y-6">
-            <div className="flex justify-between items-center">
-              <h2 className="text-base font-black text-on-surface uppercase tracking-wider">Daily Vibe Check-in</h2>
-              <span className="text-[10px] font-bold uppercase tracking-widest text-outline">Self Reflection</span>
-            </div>
 
             {/* Emotion selectors */}
             <div className="space-y-3">
@@ -274,67 +270,6 @@ export default function HomeScreen({
             </div>
           </section>
 
-          {/* Gemini Live Sentiment Micro-Journal Box */}
-          <section className="glass-card rounded-3xl p-6 space-y-4">
-            <div className="flex justify-between items-center">
-              <h3 className="text-xs font-black uppercase tracking-widest text-primary flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5" />
-                Restorative Intel (Gemini)
-              </h3>
-              <span className="text-[9px] font-bold bg-[#daf2ff] text-primary px-2 py-0.5 rounded-full">Real-time triggers</span>
-            </div>
-
-            <p className="text-xs text-on-surface-variant leading-relaxed">
-              Scribble your current mental state, workload feelings, or friction points. MindBalance AI will update your wellness pacing metrics immediately.
-            </p>
-
-            <div className="space-y-3">
-              <textarea
-                value={journalText}
-                onChange={(e) => setJournalText(e.target.value)}
-                placeholder="I am feeling overwhelmed by coding deadlines and need a mental break..."
-                rows={3}
-                className="w-full p-4 bg-surface-container-low border border-outline-variant/30 rounded-2xl text-xs focus:ring-2 focus:ring-primary/20 focus:border-primary focus:outline-none text-on-surface placeholder:text-outline-variant leading-relaxed"
-              />
-
-              <div className="flex justify-between items-center">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setJournalText("Ready for flow work! I feel highly energized, focused, and positive today.");
-                  }}
-                  className="text-[10.5px] font-black text-outline hover:text-primary transition-colors cursor-pointer uppercase tracking-wider"
-                >
-                  Preset Positive Vibe
-                </button>
-                <button
-                  onClick={handleApplyJournal}
-                  disabled={analyzing || !journalText.trim()}
-                  className="bg-primary text-white font-bold text-xs px-5 py-2.5 rounded-full hover:bg-primary/95 disabled:opacity-50 transition-all flex items-center gap-1.5 cursor-pointer shadow-md"
-                >
-                  {analyzing ? (
-                    <>
-                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                      <span>Sensing...</span>
-                    </>
-                  ) : (
-                    <>
-                      <span>Analyze Vibe</span>
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    </>
-                  )}
-                </button>
-              </div>
-
-              {aiMessage && (
-                <div className="p-3 bg-primary-container/10 border-l-2 border-primary rounded-xl text-xs text-primary leading-relaxed flex items-start gap-2 animate-fade-in mt-2">
-                  <span className="font-bold shrink-0">Zen Remedy:</span>
-                  <p>{aiMessage}</p>
-                </div>
-              )}
-            </div>
-          </section>
-
         </div>
 
         {/* Right Column: Workload Telemetry Meters & Actions */}
@@ -360,10 +295,13 @@ export default function HomeScreen({
           </button>
 
           {/* Core Bento widgets Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-4">
             
-            {/* Cognitive Load Meter */}
-            <div className="glass-card p-5 rounded-2xl flex flex-col items-center justify-between min-h-[250px] text-center">
+            {/* Cognitive Load Meter - leads to Schedule page */}
+            <div 
+              onClick={() => onSelectTab('schedule')}
+              className="glass-card p-5 rounded-2xl flex flex-col items-center justify-between min-h-[250px] text-center cursor-pointer hover:shadow-md hover:scale-[1.01] transition-all"
+            >
               <h3 className="text-[10px] font-bold uppercase tracking-wider text-outline w-full text-center">Cognitive Load</h3>
               
               <div className="relative w-24 h-24 my-2.5 rounded-full flex items-center justify-center shrink-0">
@@ -410,8 +348,11 @@ export default function HomeScreen({
               </div>
             </div>
 
-            {/* Stress Trend meter */}
-            <div className="glass-card p-5 rounded-2xl flex flex-col justify-between min-h-[250px] text-center">
+            {/* Stress Trend meter - leads to Mood page */}
+            <div 
+              onClick={() => onSelectTab('mood')}
+              className="glass-card p-5 rounded-2xl flex flex-col justify-between min-h-[250px] text-center cursor-pointer hover:shadow-md hover:scale-[1.01] transition-all"
+            >
               <div className="flex justify-between items-start w-full">
                 <h3 className="text-[10px] font-bold uppercase tracking-wider text-outline">Stress Trend</h3>
                 <span className="text-[10px] font-black text-primary bg-primary-container/20 px-2 py-0.5 rounded-full">
@@ -422,20 +363,21 @@ export default function HomeScreen({
               {/* Interactive weekly stress graph */}
               <div className="flex items-end justify-between h-24 my-1.5 px-0.5">
                 {[
-                  { label: 'Thu', val: 55 },
-                  { label: 'Fri', val: 40 },
-                  { label: 'Sat', val: 30 },
                   { label: 'Sun', val: 25 },
                   { label: 'Mon', val: 45 },
                   { label: 'Tue', val: 50 },
-                  { label: 'Wed', val: stressLevel }
+                  { label: 'Wed', val: stressLevel },
+                  { label: 'Thu', val: 55 },
+                  { label: 'Fri', val: 40 },
+                  { label: 'Sat', val: 30 }
                 ].map((d) => {
                   const isActive = d.label === 'Wed';
                   return (
                     <button
                       key={d.label}
                       type="button"
-                      onClick={() => {
+                      onClick={(e) => {
+                        e.stopPropagation();
                         setStressLevel(d.val);
                       }}
                       className="flex flex-col items-center flex-1 group focus:outline-none cursor-pointer"
@@ -461,26 +403,24 @@ export default function HomeScreen({
                 })}
               </div>
 
-              <div className="text-left border-t border-slate-100 pt-1.5">
-                <p className="text-[9px] font-bold text-on-surface">Interactive Trend</p>
-                <p className="text-[8px] text-outline leading-tight mt-0.5">Click bars to calibrate stress reserves.</p>
-              </div>
+              {/* Status info spacer to align bento layout perfectly */}
+              <div className="text-left border-t border-slate-100 pt-1.5 mt-1.5 min-h-[30px]" />
             </div>
 
             {/* Next activity details - spans 2 columns in small metrics grid */}
             <div 
               onClick={() => onSelectTab('schedule')}
-              className="sm:col-span-2 glass-card p-5 rounded-2xl flex items-center gap-4 hover:bg-slate-50 cursor-pointer transition-colors border border-dashed border-slate-200"
+              className="col-span-2 glass-card p-5 rounded-2xl flex items-center gap-4 hover:bg-slate-50 cursor-pointer transition-colors border border-dashed border-slate-200"
             >
               <div className="w-12 h-12 rounded-xl bg-primary-container/10 text-primary flex items-center justify-center font-bold">
                 <Calendar className="w-5 h-5 text-primary" />
               </div>
               <div className="flex-grow">
                 <h4 className="text-[10px] font-bold uppercase tracking-wider text-outline">Up Next</h4>
-                <p className="text-base font-bold text-on-surface">UX Design Review</p>
+                <p className="text-sm font-bold text-on-surface">UX Design Review</p>
               </div>
               <div className="text-right">
-                <span className="text-sm font-bold text-on-surface">1:00 PM</span>
+                <span className="text-xs font-bold text-on-surface">1:00 PM</span>
                 <p className="text-[9px] text-outline font-extrabold tracking-wider">60 MIN</p>
               </div>
             </div>

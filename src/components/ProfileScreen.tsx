@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { User, Sun, Moon, Sparkles, LogOut, Edit2, Medal, Watch, Bell, Shield, AlertCircle, X, Check, Laptop, RefreshCw, Trash2, Download } from 'lucide-react';
 import { User as UserType, ScheduleItem, TaskItem } from '../types';
 
@@ -25,7 +25,9 @@ export default function ProfileScreen({
   setTasks,
   setMoodCheckIns
 }: ProfileScreenProps) {
-  const [themeMode, setThemeMode] = useState<'light' | 'dark'>('light');
+  const [themeMode, setThemeMode] = useState<'light' | 'dark'>(() => {
+    return (localStorage.getItem('mb_theme') as 'light' | 'dark') || 'light';
+  });
   
   // Custom interface view modal toggles
   const [showBadgesModal, setShowBadgesModal] = useState(false);
@@ -39,12 +41,24 @@ export default function ProfileScreen({
   // User notifications or toasts
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
+  // Synchronize on mounts
+  useEffect(() => {
+    const saved = localStorage.getItem('mb_theme') as 'light' | 'dark';
+    if (saved === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, []);
+
   const toggleTheme = (mode: 'light' | 'dark') => {
     setThemeMode(mode);
     if (mode === 'dark') {
       document.documentElement.classList.add('dark');
+      localStorage.setItem('mb_theme', 'dark');
     } else {
       document.documentElement.classList.remove('dark');
+      localStorage.setItem('mb_theme', 'light');
     }
   };
 

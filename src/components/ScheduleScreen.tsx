@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, Lightbulb, CheckSquare, Plus, RefreshCw, Sparkles, AlertCircle, Calendar as CalendarIcon, Clock, Play, Pause, CheckCircle2, Info, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Lightbulb, CheckSquare, Plus, RefreshCw, Sparkles, AlertCircle, Calendar as CalendarIcon, Clock, Play, Pause, CheckCircle2, Info, X, Trash2, Edit } from 'lucide-react';
 import { ScheduleItem } from '../types';
 
 interface ScheduleScreenProps {
@@ -34,6 +34,13 @@ export default function ScheduleScreen({
 
   // Details Modal and Active Focus Session states
   const [selectedItemForDetail, setSelectedItemForDetail] = useState<ScheduleItem | null>(null);
+  
+  // Nested details and edit states for the schedule item modal
+  const [isEditingInModal, setIsEditingInModal] = useState(false);
+  const [modalTitle, setModalTitle] = useState('');
+  const [modalStart, setModalStart] = useState('');
+  const [modalEnd, setModalEnd] = useState('');
+  const [modalEnergy, setModalEnergy] = useState<'High' | 'Medium' | 'Low'>('Medium');
   
   const [focusSessionActive, setFocusSessionActive] = useState(false);
   const [focusSessionTime, setFocusSessionTime] = useState(0); // in seconds
@@ -81,18 +88,18 @@ export default function ScheduleScreen({
     }, 2500);
   };
 
+  // Convert 24hr string to beautiful AM/PM human format
+  const formatTime = (time24: string): string => {
+    const [hrStr, minStr] = time24.split(':');
+    const hr = parseInt(hrStr || '0');
+    const suffix = hr >= 12 ? 'PM' : 'AM';
+    const formattedHr = hr % 12 || 12;
+    return `${formattedHr.toString().padStart(2, '0')}:${minStr || '00'} ${suffix}`;
+  };
+
   const handleAddBlock = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle.trim()) return;
-
-    // Convert 24hr string to beautiful AM/PM human format
-    const formatTime = (time24: string): string => {
-      const [hrStr, minStr] = time24.split(':');
-      const hr = parseInt(hrStr);
-      const suffix = hr >= 12 ? 'PM' : 'AM';
-      const formattedHr = hr % 12 || 12;
-      return `${formattedHr.toString().padStart(2, '0')}:${minStr} ${suffix}`;
-    };
 
     const newItem: ScheduleItem = {
       id: `custom-${Date.now()}`,
@@ -132,6 +139,28 @@ export default function ScheduleScreen({
   const currentKeyString = toDateKeyString(selectedDate);
   const activeDayItems = scheduleItems.filter(item => item.date === currentKeyString);
 
+  // Compute live load advisor suggestion based on real scheduled items on this day
+  const highEnergyCountThisDay = activeDayItems.filter(item => item.energyLevel === 'High' && !item.completed).length;
+  const totalCountThisDay = activeDayItems.filter(item => !item.completed).length;
+
+  let adviceTitle = "Suggestion";
+  let adviceMessage = "";
+  let isHeavilyLoaded = false;
+
+  if (highEnergyCountThisDay >= 2) {
+    adviceTitle = "Suggestion (High Cognitive Load)";
+    adviceMessage = `You have scheduled ${highEnergyCountThisDay} High Stamina budgets today. We suggest deferring one entry or spacing them out through the week to safeguard your reserves options.`;
+    isHeavilyLoaded = true;
+  } else if (totalCountThisDay > 4) {
+    adviceTitle = "Suggestion (Timeline Overload)";
+    adviceMessage = `You have mapped ${totalCountThisDay} items for today. Zen analysis suggests postponing low-priority administrative tasks to decrease afternoon strain.`;
+    isHeavilyLoaded = true;
+  } else {
+    adviceTitle = "Suggestion (Balanced Pace)";
+    adviceMessage = "Your mental budget looks perfectly balanced today. Flow with proper recovery intervals to boost steady creative stamina!";
+    isHeavilyLoaded = false;
+  }
+
   // Format second counts to beautiful 00:00 style
   const formatTimerString = (secCount: number) => {
     const mins = Math.floor(secCount / 60);
@@ -161,137 +190,81 @@ export default function ScheduleScreen({
   return (
     <div className="space-y-6 relative pb-16">
       
-      {/* Date Navigation header slider */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-2 border-b border-outline-variant/10 pb-4">
-        <div className="flex items-center gap-1.5 relative">
-          <button 
-            type="button"
-            onClick={() => handleArrowNav('prev')}
-            className="p-2 hover:bg-slate-100 rounded-full text-on-surface-variant cursor-pointer transition-colors"
-            title="Previous Day"
-          >
-            <ChevronLeft className="w-5 h-5 text-on-surface-variant" />
-          </button>
-          
-          {/* Clickable Date string to toggle calendar */}
-          <button
-            type="button"
-            onClick={() => setShowCalendarDropdown(!showCalendarDropdown)}
-            className="flex items-center gap-2 px-3 py-1.5 hover:bg-slate-50 border border-transparent hover:border-slate-100 rounded-xl transition-all font-bold text-on-surface select-none text-base text-left cursor-pointer"
-            title="Select date from calendar"
-          >
-            <span>{formatDateHeading(selectedDate)}</span>
-            <CalendarIcon className="w-4 h-4 text-primary shrink-0 opacity-80" />
-          </button>
-
-          <button 
-            type="button"
-            onClick={() => handleArrowNav('next')}
-            className="p-2 hover:bg-slate-100 rounded-full text-on-surface-variant cursor-pointer transition-colors"
-            title="Next Day"
-          >
-            <ChevronRight className="w-5 h-5 text-on-surface-variant" />
-          </button>
-
-          {/* Minimal drop-down inline calendar list */}
-          {showCalendarDropdown && (
-            <div className="absolute top-12 left-12 bg-white border border-outline-variant rounded-2xl shadow-xl p-4 z-50 w-72 animate-fade-in select-none">
-              <div className="flex justify-between items-center mb-3">
-                <span className="text-xs font-extrabold uppercase tracking-widest text-primary">October 2026</span>
-                <span className="text-[10px] text-outline font-semibold">Minimal Zen Calendar</span>
+      {/* Workday Stamina moved strictly to the top (first following the header) */}
+      <section className="glass-card rounded-3xl p-6 space-y-4 select-none animate-fade-in">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5">
+            <div className="w-12 h-12 rounded-2xl bg-orange-100 flex items-center justify-center text-orange-600 text-xl font-bold shadow-sm shrink-0">
+              🔥
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-xs font-black uppercase tracking-widest text-[#006591]">Workday Stamina</h3>
+                <span className="text-[9px] font-bold bg-[#daf2ff] text-primary px-2 py-0.5 rounded-full uppercase">Optimal pacing</span>
               </div>
-              
-              <div className="grid grid-cols-7 gap-1 text-center text-xs">
-                {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((dayName, idx) => (
-                  <span key={idx} className="text-[9px] font-bold text-outline uppercase py-1">{dayName}</span>
-                ))}
-                
-                {/* Pad first rows for October 2026 which starts on Thursday (shift index 4) */}
-                {Array.from({ length: 4 }).map((_, idx) => (
-                  <span key={`pad-${idx}`} />
-                ))}
+              <p className="text-base font-black text-on-surface mt-0.5">{focusStreak} Peak Focus Periods Streak</p>
+            </div>
+          </div>
+          
+          <div className="text-xs text-on-surface-variant leading-relaxed max-w-lg border-t sm:border-t-0 sm:border-l border-slate-100 pt-3 sm:pt-0 sm:pl-5">
+            <p className="font-extrabold text-[#006591] uppercase tracking-wider text-[10px] mb-0.5">Zen Master's Advice:</p>
+            <p className="text-[11.5px]">Stagger your <strong>High Energy Budget</strong> slots with restorative low budget tasks to balance cognitive strain. Select any slot details to activate focus session timing.</p>
+          </div>
+        </div>
+      </section>
 
-                {/* Draw 31 beautiful days */}
-                {Array.from({ length: 31 }).map((_, dayNumIdx) => {
-                  const dayNum = dayNumIdx + 1;
-                  const isCurrent = selectedDate.getDate() === dayNum && selectedDate.getMonth() === 9 && selectedDate.getFullYear() === 2026;
-                  return (
-                    <button
-                      key={dayNum}
-                      type="button"
-                      onClick={() => {
-                        setSelectedDate(new Date(2026, 9, dayNum));
-                        setShowCalendarDropdown(false);
-                      }}
-                      className={`h-8 w-8 text-[11px] font-bold rounded-lg flex items-center justify-center cursor-pointer transition-all ${
-                        isCurrent 
-                          ? 'bg-primary text-white scale-110 shadow-sm' 
-                          : 'hover:bg-slate-50 text-slate-800'
-                      }`}
-                    >
-                      {dayNum}
-                    </button>
-                  );
-                })}
+      {/* AI Suggestion Banner styled beautifully with the glass-card Workday Stamina theme */}
+      {bannerVisible && (
+        <section className="glass-card rounded-3xl p-6 select-none animate-fade-in">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5">
+              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-xl font-bold shadow-sm shrink-0 ${
+                bannerAccepted ? 'bg-emerald-100 text-emerald-600' : isHeavilyLoaded ? 'bg-amber-100 text-amber-600' : 'bg-indigo-100 text-indigo-600'
+              }`}>
+                {bannerAccepted ? '✨' : isHeavilyLoaded ? '💡' : '☘️'}
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-xs font-black uppercase tracking-widest text-[#006591]">Suggestion</h3>
+                  <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase ${
+                    bannerAccepted ? 'bg-emerald-50 text-emerald-700' : isHeavilyLoaded ? 'bg-amber-50 text-amber-700' : 'bg-indigo-50 text-indigo-750'
+                  }`}>
+                    {bannerAccepted ? 'Stabilized' : isHeavilyLoaded ? 'Cognitive Load Suggestion' : 'Pristine Pace'}
+                  </span>
+                </div>
+                <p className="text-xs text-on-surface mt-0.5 leading-relaxed max-w-md">
+                  {bannerAccepted ? (
+                    <span className="font-semibold text-emerald-800">Load balanced successfully! Stamina budget is stabilized.</span>
+                  ) : (
+                    adviceMessage
+                  )}
+                </p>
               </div>
             </div>
-          )}
-        </div>
-
-        <div className="flex items-center gap-3">
-          <button 
-            type="button"
-            onClick={() => {
-              setSelectedDate(new Date(2026, 9, 23));
-              setShowCalendarDropdown(false);
-            }}
-            className="px-4 py-2 text-xs font-black border border-outline-variant text-primary rounded-full hover:bg-slate-50 cursor-pointer transition-all"
-          >
-            Today
-          </button>
-          
-          <button
-            type="button"
-            onClick={() => setShowAddForm(!showAddForm)}
-            className="px-4 py-2 text-xs font-black bg-primary text-white rounded-full hover:bg-primary/95 transition-all shadow-md cursor-pointer flex items-center gap-1.5"
-          >
-            <span>{showAddForm ? 'Close Editor' : '+ Claim Focus Slot'}</span>
-          </button>
-        </div>
-      </div>
-
-      {/* AI Recommendation Banner */}
-      {bannerVisible && (
-        <section className={`rounded-3xl p-5 flex items-start gap-4 border-l-4 transition-all duration-500 gap-3 ${
-          bannerAccepted 
-            ? 'bg-emerald-50/60 border-l-emerald-500' 
-            : 'bg-indigo-50/50 border-l-secondary'
-        }`}>
-          <div className={`p-2 rounded-xl shrink-0 ${bannerAccepted ? 'bg-emerald-100' : 'bg-indigo-100/70'}`}>
-            {bannerAccepted ? (
-              <Sparkles className="w-5 h-5 text-emerald-600" />
-            ) : (
-              <Lightbulb className="w-5 h-5 text-secondary animate-pulse" />
-            )}
-          </div>
-          <div className="flex-1 space-y-3">
-            <p className="text-xs text-on-surface leading-relaxed">
-              {bannerAccepted ? (
-                <span className="font-semibold text-emerald-800">Admin Tasks successfully postponed! Relieved 45m of afternoon load.</span>
-              ) : (
-                <>
-                  High scheduled cognitive load detected on this day. Move <span className="font-extrabold text-[#5516be]">'Admin Tasks'</span> to tomorrow?
-                </>
-              )}
-            </p>
-            {!bannerAccepted && (
-              <button 
-                type="button"
-                onClick={handleRescheduleBanner}
-                className="bg-primary hover:bg-primary/95 text-white px-5 py-2 rounded-full text-[10px] font-bold shadow-md cursor-pointer transition-all"
-              >
-                Reschedule
-              </button>
+            
+            {!bannerAccepted && isHeavilyLoaded && (
+              <div className="border-t sm:border-t-0 sm:border-l border-slate-100 pt-3 sm:pt-0 sm:pl-5">
+                <button 
+                  type="button"
+                  onClick={() => {
+                    setBannerAccepted(true);
+                    // Auto optimize high items on this date
+                    const optimizedItems = scheduleItems.map(item => {
+                      if (item.date === currentKeyString && item.energyLevel === 'High' && !item.completed) {
+                        return { ...item, energyLevel: 'Medium' as const, title: `${item.title} (Optimized)` };
+                      }
+                      return item;
+                    });
+                    setScheduleItems(optimizedItems);
+                    setTimeout(() => {
+                      setBannerAccepted(false);
+                    }, 2500);
+                  }}
+                  className="bg-primary hover:bg-primary/95 text-white px-4 py-2 rounded-full text-[10px] font-bold shadow-md cursor-pointer transition-all"
+                >
+                  Auto-Optimize Budget
+                </button>
+              </div>
             )}
           </div>
         </section>
@@ -300,11 +273,9 @@ export default function ScheduleScreen({
       {/* Dual Column Layout on Widescreen */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         
-        {/* Left Side Deck: Controls, streak, and form */}
-        <div className="lg:col-span-4 space-y-6">
-          
-          {/* Quick Block Insertion Form with Pristine Clean Light Background */}
-          {showAddForm ? (
+        {/* Left Side Deck: Controls and form - Render ONLY when showAddForm is true */}
+        {showAddForm && (
+          <div className="lg:col-span-4 space-y-6">
             <form onSubmit={handleAddBlock} className="bg-slate-50/98 border border-slate-200/65 p-6 rounded-3xl space-y-4 animate-fade-in shadow-md">
               <div className="flex justify-between items-center">
                 <h3 className="text-xs font-black text-primary tracking-widest uppercase">New Focus Block</h3>
@@ -375,39 +346,105 @@ export default function ScheduleScreen({
                 </button>
               </div>
             </form>
-          ) : (
-            /* Focus Streaks & Schedule Health Deck */
-            <section className="glass-card rounded-3xl p-6 space-y-5 animate-fade-in select-none">
-              <div className="flex justify-between items-center">
-                <h3 className="text-xs font-black uppercase tracking-widest text-[#006591]">Workday Stamina</h3>
-                <span className="text-[9px] font-bold bg-[#daf2ff] text-primary px-2.5 py-0.5 rounded-full">Optimal pacing</span>
-              </div>
+          </div>
+        )}
 
-              {/* Focus streak widget */}
-              <div className="flex items-center gap-4 bg-slate-50 border border-slate-200/30 p-4 rounded-2xl">
-                <div className="w-12 h-12 rounded-xl bg-orange-100 flex items-center justify-center text-orange-600 font-black text-lg shadow-sm">
-                  🔥
+        {/* Right Side Deck: Scrollable Daily Timeline Map - Spans full width when form is hidden */}
+        <div className={`${showAddForm ? 'lg:col-span-8' : 'lg:col-span-12'} space-y-3`}>
+          
+          {/* Date Selection, Today and '+' Button Container moved strictly above the timeline */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-2 border-b border-outline-variant/10 pb-4">
+            <div className="flex items-center gap-1.5 relative">
+              <button 
+                type="button"
+                onClick={() => handleArrowNav('prev')}
+                className="p-2 hover:bg-slate-100 rounded-full text-on-surface-variant cursor-pointer transition-colors"
+                title="Previous Day"
+              >
+                <ChevronLeft className="w-5 h-5 text-on-surface-variant" />
+              </button>
+              
+              {/* Clickable Date string to toggle calendar */}
+              <button
+                type="button"
+                onClick={() => setShowCalendarDropdown(!showCalendarDropdown)}
+                className="flex items-center gap-2 px-3 py-1.5 hover:bg-slate-50 border border-transparent hover:border-slate-100 rounded-xl transition-all font-bold text-on-surface select-none text-base text-left cursor-pointer"
+                title="Select date from calendar"
+              >
+                <span>{formatDateHeading(selectedDate)}</span>
+                <CalendarIcon className="w-4 h-4 text-primary shrink-0 opacity-80" />
+              </button>
+
+              <button 
+                type="button"
+                onClick={() => handleArrowNav('next')}
+                className="p-2 hover:bg-slate-100 rounded-full text-on-surface-variant cursor-pointer transition-colors"
+                title="Next Day"
+              >
+                <ChevronRight className="w-5 h-5 text-on-surface-variant" />
+              </button>
+
+              <button 
+                type="button"
+                onClick={() => {
+                  setSelectedDate(new Date(2026, 9, 23));
+                  setShowCalendarDropdown(false);
+                }}
+                className="px-3 py-1.5 ml-1 text-xs font-black border border-outline-variant text-primary rounded-xl hover:bg-slate-50 cursor-pointer transition-all"
+              >
+                Today
+              </button>
+
+              {/* Minimal drop-down inline calendar list */}
+              {showCalendarDropdown && (
+                <div className="absolute top-12 left-12 bg-white border border-outline-variant rounded-2xl shadow-xl p-4 z-50 w-72 animate-fade-in select-none">
+                  <div className="flex justify-between items-center mb-3">
+                    <span className="text-xs font-extrabold uppercase tracking-widest text-primary">October 2026</span>
+                    <span className="text-[10px] text-outline font-semibold">Minimal Zen Calendar</span>
+                  </div>
+                  
+                  <div className="grid grid-cols-7 gap-1 text-center text-xs">
+                    {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((dayName, idx) => (
+                      <span key={idx} className="text-[9px] font-bold text-outline uppercase py-1">{dayName}</span>
+                    ))}
+                    
+                    {/* Pad first rows for October 2026 Thursday */}
+                    {Array.from({ length: 4 }).map((_, idx) => (
+                      <span key={`pad-${idx}`} />
+                    ))}
+
+                    {/* Draw 31 beautiful days */}
+                    {Array.from({ length: 31 }).map((_, dayNumIdx) => {
+                      const dayNum = dayNumIdx + 1;
+                      const isCurrent = selectedDate.getDate() === dayNum && selectedDate.getMonth() === 9 && selectedDate.getFullYear() === 2026;
+                      return (
+                        <button
+                          key={dayNum}
+                          type="button"
+                          onClick={() => {
+                            setSelectedDate(new Date(2026, 9, dayNum));
+                            setShowCalendarDropdown(false);
+                          }}
+                          className={`h-8 w-8 text-[11px] font-bold rounded-lg flex items-center justify-center cursor-pointer transition-all ${
+                            isCurrent 
+                              ? 'bg-primary text-white scale-110 shadow-sm' 
+                              : 'hover:bg-slate-50 text-slate-800'
+                          }`}
+                        >
+                          {dayNum}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-                <div>
-                  <span className="text-[9px] font-black uppercase tracking-wider text-outline block">Daily Focus Streak</span>
-                  <p className="text-lg font-black text-on-surface">{focusStreak} Peak Periods</p>
-                </div>
-              </div>
+              )}
+            </div>
 
-              {/* Mental load advisory */}
-              <div className="space-y-2 text-xs text-on-surface-variant leading-relaxed">
-                <p className="font-bold text-on-surface">Zen Master's Advice:</p>
-                <p className="before:content-['•_'] before:text-primary">Stagger your <strong>High Energy Budget</strong> tasks with low energy admin blocks to prevent severe afternoon cognitive load spikes.</p>
-                <p className="before:content-['•_'] before:text-primary">Press any block on the right map to read description notes or activate an aesthetic <strong>Focus Session timer</strong>.</p>
-              </div>
-            </section>
-          )}
+            <div className="flex items-center gap-3">
+            </div>
+          </div>
 
-        </div>
-
-        {/* Right Side Deck: Scrollable Daily Timeline Map */}
-        <div className="lg:col-span-8 space-y-3">
-          <div className="flex justify-between items-center px-2">
+          <div className="flex justify-between items-center px-1.5">
             <span className="text-[10px] font-black text-outline uppercase tracking-wider">Vertical Flow Timeline</span>
             <span className="text-[10px] font-bold text-primary">Scroll to navigate day</span>
           </div>
@@ -443,13 +480,6 @@ export default function ScheduleScreen({
                   <div className="absolute inset-x-4 top-[240px] p-6 text-center select-none animate-fade-in glass-card rounded-2xl bg-slate-50 border border-slate-100">
                     <p className="text-sm font-semibold text-on-surface">Rest & Recovery Space</p>
                     <p className="text-xs text-outline leading-relaxed mt-1">No schedule blocks mapped. Free to restore reserve energy budget.</p>
-                    <button
-                      type="button"
-                      onClick={() => setShowAddForm(true)}
-                      className="mt-3.5 px-4 py-2 bg-primary/10 hover:bg-primary/15 text-primary text-xs font-bold rounded-full transition-all cursor-pointer"
-                    >
-                      + Claim Focus Slot
-                    </button>
                   </div>
                 )}
 
@@ -470,7 +500,23 @@ export default function ScheduleScreen({
                     <div 
                       key={item.id} 
                       style={{ top: `${topOffset}px`, height: `${durMinutes}px` }}
-                      onClick={() => setSelectedItemForDetail(item)}
+                      onClick={() => {
+                        setSelectedItemForDetail(item);
+                        setIsEditingInModal(false);
+                        setModalTitle(item.title);
+                        const parseTimeTo24h = (timeStr: string) => {
+                          const [time, suffix] = timeStr.split(' ');
+                          if (!time || !suffix) return "10:00";
+                          let [hoursStr, minutesStr] = time.split(':');
+                          let hours = parseInt(hoursStr || '0');
+                          if (suffix === 'PM' && hours !== 12) hours += 12;
+                          if (suffix === 'AM' && hours === 12) hours = 0;
+                          return `${String(hours).padStart(2, '0')}:${minutesStr || '00'}`;
+                        };
+                        setModalStart(parseTimeTo24h(item.startTime));
+                        setModalEnd(parseTimeTo24h(item.endTime));
+                        setModalEnergy(item.energyLevel);
+                      }}
                       className={`absolute left-2 right-4 rounded-r-2xl p-3 flex flex-col justify-between group hover:shadow-md hover:brightness-98 transition-all z-15 cursor-pointer select-none border border-slate-100 ${cardStyle} ${isCompleted ? 'opacity-55 line-through decoration-slate-400' : ''}`}
                     >
                       <div className="flex justify-between items-start">
@@ -507,58 +553,160 @@ export default function ScheduleScreen({
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-end justify-center animate-fade-in p-4 select-none">
           <div className="bg-white w-full max-w-sm rounded-t-3xl rounded-b-xl p-6 space-y-5 animate-slide-up shadow-xl border border-slate-200">
             <div className="flex justify-between items-start">
-              <div>
-                <span className="text-[10px] font-extrabold uppercase tracking-widest text-outline">Schedule Focus block</span>
-                <h3 className="text-lg font-black text-on-surface mt-1">{selectedItemForDetail.title}</h3>
+              <div className="flex-1 mr-2">
+                <span className="text-[10px] font-extrabold uppercase tracking-widest text-[#006591] bg-sky-50 px-2 py-0.5 rounded-full inline-block">
+                  {isEditingInModal ? 'Editing Slot' : 'Focus Slot Details'}
+                </span>
+                {isEditingInModal ? (
+                  <input
+                    type="text"
+                    value={modalTitle}
+                    onChange={(e) => setModalTitle(e.target.value)}
+                    className="w-full h-10 p-2 border border-slate-200 text-xs font-bold rounded-xl mt-2 focus:ring-1 focus:ring-primary focus:outline-none"
+                    placeholder="Slot Title"
+                  />
+                ) : (
+                  <h3 className="text-base font-black text-on-surface mt-1.5 leading-tight">{selectedItemForDetail.title}</h3>
+                )}
               </div>
-              <button 
-                onClick={() => setSelectedItemForDetail(null)}
-                className="p-1.5 rounded-full hover:bg-slate-100 cursor-pointer text-slate-400"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-1.5 shrink-0">
+                {!isEditingInModal && (
+                  <>
+                    <button
+                      onClick={() => setIsEditingInModal(true)}
+                      className="p-1.5 rounded-full hover:bg-sky-50 text-primary cursor-pointer transition-colors"
+                      title="Edit Entry"
+                    >
+                      <Edit className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => {
+                        setScheduleItems(prev => prev.filter(item => item.id !== selectedItemForDetail.id));
+                        setSelectedItemForDetail(null);
+                      }}
+                      className="p-1.5 rounded-full hover:bg-red-50 text-error cursor-pointer transition-colors"
+                      title="Delete Entry"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </>
+                )}
+                <button 
+                  onClick={() => setSelectedItemForDetail(null)}
+                  className="p-1.5 rounded-full hover:bg-slate-100 cursor-pointer text-slate-400"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             </div>
 
-            <div className="space-y-3.5 border-t border-b border-slate-100 py-4 text-xs text-on-surface-variant">
-              <div className="flex justify-between">
-                <span className="font-semibold text-outline">Allocation Period:</span>
-                <span className="font-extrabold text-on-surface">{selectedItemForDetail.startTime} – {selectedItemForDetail.endTime}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="font-semibold text-outline">Energy Required:</span>
-                <span className={`font-extrabold uppercase py-0.5 px-2.5 rounded-full text-[9px] ${
-                  selectedItemForDetail.energyLevel === 'High' ? 'bg-orange-50 text-orange-600' :
-                  selectedItemForDetail.energyLevel === 'Medium' ? 'bg-yellow-50 text-yellow-600' : 'bg-emerald-50 text-emerald-600'
-                }`}>{selectedItemForDetail.energyLevel} Budget</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="font-semibold text-outline">Pace Status:</span>
-                <span className="font-extrabold text-on-surface">{selectedItemForDetail.completed ? 'Completed' : 'Adaptive Queue'}</span>
-              </div>
-              <p className="text-[11px] text-outline leading-relaxed mt-2 italic bg-slate-50 p-2.5 rounded-xl">
-                Zen analysis recommends focusing with quiet notification limits during this high physical productivity slot. No browser context shifts.
-              </p>
-            </div>
+            {isEditingInModal ? (
+              <div className="space-y-4 border-t border-b border-slate-100 py-4 text-xs">
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10px] font-black uppercase text-outline block mb-1">Start Time</label>
+                    <input
+                      type="time"
+                      value={modalStart}
+                      onChange={(e) => setModalStart(e.target.value)}
+                      className="w-full h-9 px-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black uppercase text-outline block mb-1">End Time</label>
+                    <input
+                      type="time"
+                      value={modalEnd}
+                      onChange={(e) => setModalEnd(e.target.value)}
+                      className="w-full h-9 px-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium"
+                    />
+                  </div>
+                </div>
 
-            <div className="flex justify-between gap-3">
-              <button
-                onClick={() => {
-                  // Toggle complete directly
-                  setScheduleItems(prev => prev.map(item => item.id === selectedItemForDetail.id ? { ...item, completed: !item.completed } : item));
-                  setSelectedItemForDetail(null);
-                }}
-                className="flex-1 py-3 text-xs bg-slate-100 hover:bg-slate-200/80 text-slate-800 font-extrabold rounded-2xl cursor-pointer text-center transition-all"
-              >
-                {selectedItemForDetail.completed ? 'Mark Active' : 'Mark Completed'}
-              </button>
-              <button
-                onClick={() => startFocusTimer(selectedItemForDetail)}
-                className="flex-1 py-3 text-xs bg-primary hover:bg-primary/95 text-white font-extrabold rounded-2xl cursor-pointer text-center transition-all shadow-md flex items-center justify-center gap-1.5"
-              >
-                <Play className="w-3.5 h-3.5 fill-white" />
-                <span>Start Focus</span>
-              </button>
-            </div>
+                <div>
+                  <label className="text-[10px] font-black uppercase text-outline block mb-1">Stamina Required</label>
+                  <select
+                    value={modalEnergy}
+                    onChange={(e) => setModalEnergy(e.target.value as any)}
+                    className="w-full h-9 px-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-800"
+                  >
+                    <option value="High">High Budget</option>
+                    <option value="Medium">Medium Budget</option>
+                    <option value="Low">Low Budget</option>
+                  </select>
+                </div>
+
+                <div className="flex gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingInModal(false)}
+                    className="flex-1 py-2.5 text-xs bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-xl font-bold cursor-pointer transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!modalTitle.trim()) return;
+                      setScheduleItems(prev => prev.map(item => item.id === selectedItemForDetail.id ? {
+                        ...item,
+                        title: modalTitle,
+                        startTime: formatTime(modalStart),
+                        endTime: formatTime(modalEnd),
+                        energyLevel: modalEnergy
+                      } : item));
+                      setSelectedItemForDetail(null);
+                    }}
+                    className="flex-1 py-2.5 text-xs bg-primary text-white hover:bg-primary/95 rounded-xl font-bold cursor-pointer transition-colors"
+                  >
+                    Save Changes
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="space-y-3.5 border-t border-b border-slate-100 py-4 text-xs text-on-surface-variant">
+                  <div className="flex justify-between">
+                    <span className="font-semibold text-outline">Allocation Period:</span>
+                    <span className="font-extrabold text-on-surface">{selectedItemForDetail.startTime} – {selectedItemForDetail.endTime}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="font-semibold text-outline">Energy Required:</span>
+                    <span className={`font-extrabold uppercase py-0.5 px-2.5 rounded-full text-[9px] ${
+                      selectedItemForDetail.energyLevel === 'High' ? 'bg-orange-50 text-orange-600' :
+                      selectedItemForDetail.energyLevel === 'Medium' ? 'bg-yellow-50 text-yellow-600' : 'bg-emerald-50 text-emerald-600'
+                    }`}>{selectedItemForDetail.energyLevel} Budget</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="font-semibold text-outline">Pace Status:</span>
+                    <span className="font-extrabold text-on-surface">{selectedItemForDetail.completed ? 'Completed' : 'Adaptive Queue'}</span>
+                  </div>
+                  <p className="text-[11px] text-outline leading-relaxed mt-2 italic bg-slate-50 p-2.5 rounded-xl">
+                    Zen analysis recommends focusing with quiet notification limits during this high physical productivity slot. No browser context shifts.
+                  </p>
+                </div>
+
+                <div className="flex justify-between gap-3">
+                  <button
+                    onClick={() => {
+                      // Toggle complete directly
+                      setScheduleItems(prev => prev.map(item => item.id === selectedItemForDetail.id ? { ...item, completed: !item.completed } : item));
+                      setSelectedItemForDetail(null);
+                    }}
+                    className="flex-1 py-3 text-xs bg-slate-100 hover:bg-slate-200/80 text-slate-800 font-extrabold rounded-2xl cursor-pointer text-center transition-all"
+                  >
+                    {selectedItemForDetail.completed ? 'Mark Active' : 'Mark Completed'}
+                  </button>
+                  <button
+                    onClick={() => startFocusTimer(selectedItemForDetail)}
+                    className="flex-1 py-3 text-xs bg-primary hover:bg-primary/95 text-white font-extrabold rounded-2xl cursor-pointer text-center transition-all shadow-md flex items-center justify-center gap-1.5"
+                  >
+                    <Play className="w-3.5 h-3.5 fill-white" />
+                    <span>Start Focus</span>
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
