@@ -106,5 +106,45 @@ export const supabaseSync = {
     if (!sb) return null;
     const { error } = await sb.from('tasks').delete().eq('id', taskId).eq('profile_id', userId);
     if (error) console.error('Supabase delete task error:', error.message);
+  },
+
+  // Schedule Items
+  async fetchSchedule(userId: string) {
+    const sb = getSupabase();
+    if (!sb) return null;
+    const { data, error } = await sb
+      .from('schedule_items')
+      .select('*')
+      .eq('profile_id', userId)
+      .order('created_at', { ascending: true });
+    if (error) console.warn('Supabase fetch schedule items error:', error.message);
+    return data;
+  },
+
+  async saveScheduleItem(userId: string, item: any) {
+    const sb = getSupabase();
+    if (!sb) return null;
+    const payload = {
+      id: item.id.length > 20 ? item.id : undefined, // UUID checks
+      title: item.title,
+      start_time: item.startTime,
+      end_time: item.endTime,
+      energy_level: item.energyLevel,
+      completed: item.completed,
+      emoji: item.emoji,
+      date: item.date || '2026-06-15',
+      profile_id: userId
+    };
+
+    const { data, error } = await sb.from('schedule_items').upsert([payload]);
+    if (error) console.error('Supabase save schedule item error:', error.message);
+    return data;
+  },
+
+  async deleteScheduleItem(userId: string, itemId: string) {
+    const sb = getSupabase();
+    if (!sb) return null;
+    const { error } = await sb.from('schedule_items').delete().eq('id', itemId).eq('profile_id', userId);
+    if (error) console.error('Supabase delete schedule item error:', error.message);
   }
 };

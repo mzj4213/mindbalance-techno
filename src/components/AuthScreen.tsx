@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Mail, Lock, User, Eye, EyeOff, ArrowRight, CheckCircle, Loader2, Flower } from 'lucide-react';
 import { User as UserType } from '../types';
+import { getSupabase, isSupabaseConfigured } from '../lib/supabase';
 
 interface AuthScreenProps {
   onLoginSuccess: (user: UserType) => void;
@@ -31,7 +32,7 @@ export default function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
     return JSON.parse(list);
   };
 
-  const handleRegister = (e: React.FormEvent) => {
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
@@ -42,6 +43,38 @@ export default function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
     setLoading(true);
     setLoadingMessage('Creating your tranquil space...');
 
+    if (isSupabaseConfigured()) {
+      try {
+        const sb = getSupabase();
+        const { data, error } = await sb.auth.signUp({
+          email: email.toLowerCase(),
+          password,
+          options: {
+            data: {
+              full_name: fullName,
+            }
+          }
+        });
+
+        if (error) {
+          setError(error.message);
+          setLoading(false);
+          return;
+        }
+
+        setLoading(false);
+        setIsLogin(true);
+        setError('');
+        alert(`Account created! ${data.user?.identities?.length === 0 ? 'An account already exists under this email.' : 'Welcome to the focus community! Please log in above.'}`);
+        return;
+      } catch (err: any) {
+        setError(err.message || 'An error occurred during sign up.');
+        setLoading(false);
+        return;
+      }
+    }
+
+    // Local Storage mock registration
     setTimeout(() => {
       const users = getRegisteredUsers();
       if (users[email.toLowerCase()]) {
@@ -50,18 +83,16 @@ export default function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
         return;
       }
 
-      // Add to fake db
       users[email.toLowerCase()] = { name: fullName, pass: password };
       localStorage.setItem('mb_registered_users', JSON.stringify(users));
 
       setLoading(false);
-      // Automatically switch to login screen and preset the email
       setIsLogin(true);
       setError('');
     }, 1500);
   };
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
@@ -71,6 +102,50 @@ export default function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
     setLoading(true);
     setLoadingMessage('Restoring digital harmony...');
 
+    if (isSupabaseConfigured()) {
+      try {
+        const sb = getSupabase();
+        const { data, error } = await sb.auth.signInWithPassword({
+          email: email.toLowerCase(),
+          password
+        });
+
+        if (error) {
+          setError(error.message);
+          setLoading(false);
+          return;
+        }
+
+        if (data.user) {
+          const { data: profile } = await sb.from('profiles').select('*').eq('id', data.user.id).single();
+          
+          const activeUser: UserType = {
+            id: data.user.id,
+            email: data.user.email || email.toLowerCase(),
+            fullName: profile?.full_name || data.user.user_metadata?.full_name || fullName || 'Zen User',
+            role: profile?.role || (data.user.email === 'mzj4213@gmail.com' ? 'Product Designer' : 'Mindfulness Practitioner'),
+            avatarUrl: profile?.avatar_url || (data.user.email === 'mzj4213@gmail.com' 
+              ? 'https://lh3.googleusercontent.com/aida-public/AB6AXuBMQI6QRQM2WRt-f3v3S9YdBc-x8RoIs5zdQBforjynBvi_7wirk6gqq0nXVhqAsORolDf1ayoXYxVQfF8x066FI8ZunaRn2lRq1yQljsvEdMRywCgfV0q2sw61An1VoNRltV2nFHFo60FfKqZOo1mS8_O5lxa4PZfqmysWa5k_GCYQxo1OlrxBDCTQ21qWDQ4T2p01UDFeMwBShzKJH3M3vifKvoYzcngLUIB1uNmFYZVLi4SpUInWfv8PKZNfxrk34sVBN_Rv2tQ'
+              : 'https://lh3.googleusercontent.com/aida-public/AB6AXuCCN6vpkGJsWL0rn_CuT7aCl8m9xd-UyPSgMhAkgEUljpgbK_ZgY21sxEyd6ahiB6oqeyUTpQuAGGj99GpW-bvoSKujfF9sjVTKjc43N4OCh-GI6r9QgeHqKIll3c4ziTa5sY8vo3IJ8dUceq_HqdDscbeKAbFyLIdNStGtvw80mwnO97Nec2_Izo1MT7BAQp5b4g_Xy59PQb-yjeer-bdv98zIx1utRFFwF3pYNz0n4XXBGbmTjlpabw0nREHg7ECpQkHyLAsOSJ4'),
+            balanceScore: profile?.balance_score || 94,
+            focusStreak: profile?.focus_streak || 5,
+            burnoutRisk: profile?.burnout_risk || 12,
+            tier: 'freemium',
+            moodLogCountToday: 1
+          };
+
+          setLoading(false);
+          onLoginSuccess(activeUser);
+          return;
+        }
+      } catch (err: any) {
+        setError(err.message || 'An error occurred during log in.');
+        setLoading(false);
+        return;
+      }
+    }
+
+    // Local Storage mock login
     setTimeout(() => {
       const users = getRegisteredUsers();
       const matched = users[email.toLowerCase()];
@@ -91,7 +166,9 @@ export default function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
           : 'https://lh3.googleusercontent.com/aida-public/AB6AXuCCN6vpkGJsWL0rn_CuT7aCl8m9xd-UyPSgMhAkgEUljpgbK_ZgY21sxEyd6ahiB6oqeyUTpQuAGGj99GpW-bvoSKujfF9sjVTKjc43N4OCh-GI6r9QgeHqKIll3c4ziTa5sY8vo3IJ8dUceq_HqdDscbeKAbFyLIdNStGtvw80mwnO97Nec2_Izo1MT7BAQp5b4g_Xy59PQb-yjeer-bdv98zIx1utRFFwF3pYNz0n4XXBGbmTjlpabw0nREHg7ECpQkHyLAsOSJ4',
         balanceScore: 94,
         focusStreak: 5,
-        burnoutRisk: 12
+        burnoutRisk: 12,
+        tier: 'freemium',
+        moodLogCountToday: 1
       };
 
       setLoading(false);

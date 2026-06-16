@@ -1,4 +1,5 @@
 export type MoodType = 'Sad' | 'Okay' | 'Good' | 'Focused' | 'Energized';
+export type SubscriptionTier = 'freemium' | 'student' | 'professional';
 
 export interface User {
   id: string;
@@ -9,6 +10,8 @@ export interface User {
   balanceScore: number;
   focusStreak: number;
   burnoutRisk: number; // percentage, e.g. 12 for 12%
+  tier?: SubscriptionTier; // 'freemium' | 'student' | 'professional'
+  moodLogCountToday?: number; // strictly tracked for freemium daily limitations
 }
 
 export interface MoodCheckIn {
@@ -17,6 +20,12 @@ export interface MoodCheckIn {
   mood: MoodType;
   intensity: number; // 0 to 100
   note?: string;
+}
+
+export interface MoodCheckInEntry {
+  value: number;
+  time: string;
+  date: string;
 }
 
 export interface ScheduleItem {

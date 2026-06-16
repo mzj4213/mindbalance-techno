@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, Lightbulb, CheckSquare, Plus, RefreshCw, Sparkles, AlertCircle, Calendar as CalendarIcon, Clock, Play, Pause, CheckCircle2, Info, X, Trash2, Edit } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Lightbulb, CheckSquare, Plus, RefreshCw, Sparkles, AlertCircle, Calendar as CalendarIcon, Clock, Play, Pause, CheckCircle2, Info, X, Trash2, Edit, Brain } from 'lucide-react';
 import { ScheduleItem } from '../types';
 
 interface ScheduleScreenProps {
@@ -139,6 +139,13 @@ export default function ScheduleScreen({
   const currentKeyString = toDateKeyString(selectedDate);
   const activeDayItems = scheduleItems.filter(item => item.date === currentKeyString);
 
+  // Compute schedule fullness and cognitive load
+  const scheduleFullness = Math.min(100, activeDayItems.reduce((acc, item) => {
+    if (item.energyLevel === 'High') return acc + 35;
+    if (item.energyLevel === 'Medium') return acc + 20;
+    return acc + 10;
+  }, 0));
+
   // Compute live load advisor suggestion based on real scheduled items on this day
   const highEnergyCountThisDay = activeDayItems.filter(item => item.energyLevel === 'High' && !item.completed).length;
   const totalCountThisDay = activeDayItems.filter(item => !item.completed).length;
@@ -149,15 +156,19 @@ export default function ScheduleScreen({
 
   if (highEnergyCountThisDay >= 2) {
     adviceTitle = "Suggestion (High Cognitive Load)";
-    adviceMessage = `You have scheduled ${highEnergyCountThisDay} High Stamina budgets today. We suggest deferring one entry or spacing them out through the week to safeguard your reserves options.`;
+    adviceMessage = `You have scheduled ${highEnergyCountThisDay} High Energy slots today. We suggest deferring one entry or spacing them out through the week to safeguard your reserves options.`;
     isHeavilyLoaded = true;
   } else if (totalCountThisDay > 4) {
     adviceTitle = "Suggestion (Timeline Overload)";
     adviceMessage = `You have mapped ${totalCountThisDay} items for today. Zen analysis suggests postponing low-priority administrative tasks to decrease afternoon strain.`;
     isHeavilyLoaded = true;
+  } else if (activeDayItems.length === 0) {
+    adviceTitle = "Suggestion (Empty Schedule)";
+    adviceMessage = "You have no focus tasks scheduled for this day. We suggest pressing the '+' button to add an intention block or mapping out custom routines.";
+    isHeavilyLoaded = false;
   } else {
     adviceTitle = "Suggestion (Balanced Pace)";
-    adviceMessage = "Your mental budget looks perfectly balanced today. Flow with proper recovery intervals to boost steady creative stamina!";
+    adviceMessage = "Your mental budget looks perfectly balanced today. Flow with proper recovery intervals to boost steady creative energy!";
     isHeavilyLoaded = false;
   }
 
@@ -190,26 +201,54 @@ export default function ScheduleScreen({
   return (
     <div className="space-y-6 relative pb-16">
       
-      {/* Workday Stamina moved strictly to the top (first following the header) */}
-      <section className="glass-card rounded-3xl p-6 space-y-4 select-none animate-fade-in">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3.5">
-            <div className="w-12 h-12 rounded-2xl bg-orange-100 flex items-center justify-center text-orange-600 text-xl font-bold shadow-sm shrink-0">
-              🔥
+      {/* Cognitive Load fullness tracker card */}
+      <section className="glass-card rounded-3xl p-6 space-y-3.5 select-none animate-fade-in flex flex-col justify-between">
+        <div className="flex items-start justify-between gap-1">
+          <div className="flex items-start gap-3.5">
+            <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-700 flex items-center justify-center text-lg font-bold shadow-sm shrink-0">
+              <Brain className="w-5 h-5 text-indigo-600" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-xs font-black uppercase tracking-widest text-[#006591]">Workday Stamina</h3>
-                <span className="text-[9px] font-bold bg-[#daf2ff] text-primary px-2 py-0.5 rounded-full uppercase">Optimal pacing</span>
+                <h3 className="text-xs font-black uppercase tracking-widest text-indigo-700">Cognitive Load</h3>
+                <span className="text-[9px] font-bold bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full uppercase">Live Fullness</span>
               </div>
-              <p className="text-base font-black text-on-surface mt-0.5">{focusStreak} Peak Focus Periods Streak</p>
+              <div className="flex items-baseline gap-1 mt-1">
+                <span className="text-2xl font-black text-on-surface tracking-tight">
+                  {scheduleFullness}%
+                </span>
+                <span className="text-[10px] font-bold text-outline uppercase">Schedule fullness</span>
+              </div>
             </div>
           </div>
           
-          <div className="text-xs text-on-surface-variant leading-relaxed max-w-lg border-t sm:border-t-0 sm:border-l border-slate-100 pt-3 sm:pt-0 sm:pl-5">
-            <p className="font-extrabold text-[#006591] uppercase tracking-wider text-[10px] mb-0.5">Zen Master's Advice:</p>
-            <p className="text-[11.5px]">Stagger your <strong>High Energy Budget</strong> slots with restorative low budget tasks to balance cognitive strain. Select any slot details to activate focus session timing.</p>
+          <span className={`text-[9px] font-extrabold uppercase px-2.5 py-1 rounded-full select-none ${
+            scheduleFullness > 80 ? 'bg-rose-50 text-rose-700' :
+            scheduleFullness > 50 ? 'bg-amber-50 text-amber-700' :
+            scheduleFullness > 20 ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'
+          }`}>
+            {scheduleFullness > 80 ? 'Overloaded' :
+             scheduleFullness > 50 ? 'Demanding' :
+             scheduleFullness > 20 ? 'Balanced' : 'Light'}
+          </span>
+        </div>
+
+        <div className="space-y-2">
+          <div className="w-full h-2 bg-[#f1f5f9] rounded-full overflow-hidden">
+            <div 
+              className={`h-full rounded-full transition-all duration-500 ${
+                scheduleFullness > 80 ? 'bg-rose-500' :
+                scheduleFullness > 50 ? 'bg-amber-500' : 'bg-emerald-500'
+              }`}
+              style={{ width: `${scheduleFullness}%` }}
+            />
           </div>
+          <p className="text-[11px] text-outline leading-tight">
+            {scheduleFullness === 0 ? "Daily agenda is totally clear. Zero cognitive load." :
+             scheduleFullness > 80 ? "Strain alarm! Restructure slots or delegate non-essential items." :
+             scheduleFullness > 50 ? "Full schedule. Space out demanding goals with standard breaks." :
+             "Balanced pacing. High and low budget periods are safely aligned."}
+          </p>
         </div>
       </section>
 
@@ -229,7 +268,7 @@ export default function ScheduleScreen({
                   <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase ${
                     bannerAccepted ? 'bg-emerald-50 text-emerald-700' : isHeavilyLoaded ? 'bg-amber-50 text-amber-700' : 'bg-indigo-50 text-indigo-750'
                   }`}>
-                    {bannerAccepted ? 'Stabilized' : isHeavilyLoaded ? 'Cognitive Load Suggestion' : 'Pristine Pace'}
+                    {bannerAccepted ? 'Stabilized' : adviceTitle}
                   </span>
                 </div>
                 <p className="text-xs text-on-surface mt-0.5 leading-relaxed max-w-md">
@@ -319,7 +358,7 @@ export default function ScheduleScreen({
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[10px] text-outline font-extrabold uppercase">Energy Budget</label>
+                  <label className="text-[10px] text-outline font-extrabold uppercase">Energy Level</label>
                   <div className="grid grid-cols-3 gap-2">
                     {(['High', 'Medium', 'Low'] as const).map((energy) => (
                       <button
@@ -444,8 +483,7 @@ export default function ScheduleScreen({
             </div>
           </div>
 
-          <div className="flex justify-between items-center px-1.5">
-            <span className="text-[10px] font-black text-outline uppercase tracking-wider">Vertical Flow Timeline</span>
+          <div className="flex justify-end items-center px-1.5">
             <span className="text-[10px] font-bold text-primary">Scroll to navigate day</span>
           </div>
           
@@ -453,7 +491,7 @@ export default function ScheduleScreen({
             <div className="relative flex h-full min-h-[1440px]">
               
               {/* Hour Tags Column (Left Column) */}
-              <div className="w-16 flex-none border-r border-slate-100 py-4 text-center bg-slate-50/50">
+              <div className="w-16 flex-none border-r border-slate-100 py-4 text-center">
                 {Array.from({ length: 24 }).map((_, i) => {
                   const formattedHour = i.toString().padStart(2, '0') + ":00";
                   const isHighlight = i === 9 || i === 11 || i === 14;
@@ -526,7 +564,7 @@ export default function ScheduleScreen({
                         </div>
                         <div className="flex items-center gap-1.5">
                           <span className="text-[7.5px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-white/70">
-                            {item.energyLevel} Budget
+                            {item.energyLevel} Energy
                           </span>
                           {isCompleted && (
                             <span className="text-[8px] bg-emerald-500 text-white rounded-full p-0.5 font-bold">✓</span>
@@ -630,9 +668,9 @@ export default function ScheduleScreen({
                     onChange={(e) => setModalEnergy(e.target.value as any)}
                     className="w-full h-9 px-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-800"
                   >
-                    <option value="High">High Budget</option>
-                    <option value="Medium">Medium Budget</option>
-                    <option value="Low">Low Budget</option>
+                    <option value="High">High Energy</option>
+                    <option value="Medium">Medium Energy</option>
+                    <option value="Low">Low Energy</option>
                   </select>
                 </div>
 
@@ -675,7 +713,7 @@ export default function ScheduleScreen({
                     <span className={`font-extrabold uppercase py-0.5 px-2.5 rounded-full text-[9px] ${
                       selectedItemForDetail.energyLevel === 'High' ? 'bg-orange-50 text-orange-600' :
                       selectedItemForDetail.energyLevel === 'Medium' ? 'bg-yellow-50 text-yellow-600' : 'bg-emerald-50 text-emerald-600'
-                    }`}>{selectedItemForDetail.energyLevel} Budget</span>
+                    }`}>{selectedItemForDetail.energyLevel} Energy</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="font-semibold text-outline">Pace Status:</span>

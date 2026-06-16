@@ -1,15 +1,61 @@
 import React, { useState } from 'react';
-import { Bolt, Layout, Trash2, CheckCircle2, Play, Plus, Edit2, X, Calendar, Check } from 'lucide-react';
-import { TaskItem } from '../types';
+import { Bolt, Layout, Trash2, CheckCircle2, Play, Plus, Edit2, X, Calendar, Check, PlusCircle } from 'lucide-react';
+import { TaskItem, ScheduleItem } from '../types';
 
 const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 interface TasksScreenProps {
   tasks: TaskItem[];
   setTasks: React.Dispatch<React.SetStateAction<TaskItem[]>>;
+  scheduleItems: ScheduleItem[];
+  setScheduleItems: React.Dispatch<React.SetStateAction<ScheduleItem[]>>;
 }
 
-export default function TasksScreen({ tasks, setTasks }: TasksScreenProps) {
+export default function TasksScreen({ tasks, setTasks, scheduleItems, setScheduleItems }: TasksScreenProps) {
+  // Add to schedule modal states
+  const [showAddToScheduleModal, setShowAddToScheduleModal] = useState(false);
+  const [selectedTaskToSchedule, setSelectedTaskToSchedule] = useState<TaskItem | null>(null);
+  
+  // Schedule form fields
+  const [scheduleTitle, setScheduleTitle] = useState('');
+  const [scheduleEnergy, setScheduleEnergy] = useState<'High' | 'Medium' | 'Low'>('Medium');
+  const [scheduleStartTime, setScheduleStartTime] = useState('02:00 PM');
+  const [scheduleEndTime, setScheduleEndTime] = useState('03:30 PM');
+  const [scheduleDate, setScheduleDate] = useState('2026-10-23');
+  const [scheduleEmoji, setScheduleEmoji] = useState('🎯');
+
+  const startAddToScheduleWorkflow = (task: TaskItem) => {
+    setSelectedTaskToSchedule(task);
+    setScheduleTitle(task.title);
+    setScheduleEnergy(task.energyLevel);
+    // Defaults for the workflow
+    setScheduleStartTime('10:00 AM');
+    setScheduleEndTime('11:30 AM');
+    setScheduleDate(task.deadline || '2026-10-23');
+    setScheduleEmoji('🎯');
+    setShowAddToScheduleModal(true);
+  };
+
+  const handleConfirmAddToSchedule = () => {
+    if (!selectedTaskToSchedule) return;
+
+    const newItem: ScheduleItem = {
+      id: `task-sched-${Date.now()}`,
+      title: scheduleTitle,
+      startTime: scheduleStartTime,
+      endTime: scheduleEndTime,
+      energyLevel: scheduleEnergy,
+      completed: false,
+      emoji: scheduleEmoji,
+      date: scheduleDate
+    };
+
+    setScheduleItems(prev => [...prev, newItem]);
+    setShowAddToScheduleModal(false);
+    setSelectedTaskToSchedule(null);
+    alert(`Successfully added "${scheduleTitle}" to your Schedule page on ${scheduleDate}!`);
+  };
+
   // Sort tab can order by Energy level, Deadline date, or Priority value
   const [sortTab, setSortTab] = useState<'Energy' | 'Deadline' | 'Priority'>('Energy');
   
@@ -137,20 +183,12 @@ export default function TasksScreen({ tasks, setTasks }: TasksScreenProps) {
             <p className="text-xs text-on-surface-variant leading-relaxed">
               Intentions serve as critical pacing parameters. Click the <span className="font-extrabold text-primary">"+"</span> button to claim a new work node anytime.
             </p>
-            <div className="border-t border-slate-100 pt-3 space-y-2">
-              <p className="text-[10px] font-extrabold uppercase text-outline">Category Keys</p>
-              <div className="flex flex-wrap gap-2 text-[9px] font-bold uppercase tracking-wider">
-                <span className="bg-orange-50 text-orange-700 px-2 py-1 rounded-md border border-orange-200/30">High budget (Severe stamina)</span>
-                <span className="bg-yellow-50 text-yellow-800 px-2 py-1 rounded-md border border-yellow-200/30">Med budget (Sustained stamina)</span>
-                <span className="bg-emerald-50 text-emerald-850 px-2 py-1 rounded-md border border-emerald-200/30">Low budget (Restorative stamina)</span>
-              </div>
-            </div>
           </section>
           
           {/* Task Breakdown Indicators */}
           <section className="space-y-3">
             <div className="flex justify-between items-baseline px-1">
-              <h3 className="text-xs font-black text-on-surface uppercase tracking-wider" id="breakdown-label">Intention Filter Breakdown</h3>
+              <h3 className="text-xs font-black text-on-surface uppercase tracking-wider" id="breakdown-label">Energy Budget Filter</h3>
               {activeFilterCategory && (
                 <button 
                   type="button"
@@ -177,11 +215,11 @@ export default function TasksScreen({ tasks, setTasks }: TasksScreenProps) {
                 <div className="flex items-center gap-1.5">
                   <Bolt className="w-4 h-4 text-orange-600 fill-orange-600 shrink-0" />
                   <div>
-                    <span className="text-[9px] font-extrabold uppercase tracking-widest text-outline block">High Stamina</span>
+                    <span className="text-[9px] font-extrabold uppercase tracking-widest text-outline block">High Energy</span>
                     <span className="text-xs font-black text-orange-700">{highCount} Items</span>
                   </div>
                 </div>
-                <span className="hidden lg:inline text-[9px] font-bold text-outline uppercase tracking-wider">High budget</span>
+                <span className="hidden lg:inline text-[9px] font-bold text-outline uppercase tracking-wider">High Energy</span>
               </button>
 
               <button
@@ -196,11 +234,11 @@ export default function TasksScreen({ tasks, setTasks }: TasksScreenProps) {
                 <div className="flex items-center gap-1.5">
                   <Bolt className="w-4 h-4 text-yellow-600 fill-yellow-600 shrink-0" />
                   <div>
-                    <span className="text-[9px] font-extrabold uppercase tracking-widest text-outline block">Medium Stamina</span>
+                    <span className="text-[9px] font-extrabold uppercase tracking-widest text-outline block">Medium Energy</span>
                     <span className="text-xs font-black text-yellow-700">{mediumCount} Items</span>
                   </div>
                 </div>
-                <span className="hidden lg:inline text-[9px] font-bold text-outline uppercase tracking-wider">Medium budget</span>
+                <span className="hidden lg:inline text-[9px] font-bold text-outline uppercase tracking-wider">Medium Energy</span>
               </button>
 
               <button
@@ -215,11 +253,11 @@ export default function TasksScreen({ tasks, setTasks }: TasksScreenProps) {
                 <div className="flex items-center gap-1.5">
                   <Bolt className="w-4 h-4 text-emerald-600 fill-emerald-600 shrink-0" />
                   <div>
-                    <span className="text-[9px] font-extrabold uppercase tracking-widest text-outline block">Low Stamina</span>
+                    <span className="text-[9px] font-extrabold uppercase tracking-widest text-outline block">Low Energy</span>
                     <span className="text-xs font-black text-emerald-700">{lowCount} Items</span>
                   </div>
                 </div>
-                <span className="hidden lg:inline text-[9px] font-bold text-outline uppercase tracking-wider">Low budget</span>
+                <span className="hidden lg:inline text-[9px] font-bold text-outline uppercase tracking-wider">Low Energy</span>
               </button>
 
             </div>
@@ -383,13 +421,16 @@ export default function TasksScreen({ tasks, setTasks }: TasksScreenProps) {
 
             let tagColor = "bg-orange-50 text-orange-700";
             let accentLeft = "border-l-4 border-l-orange-500";
+            let boltColor = "text-orange-600";
 
             if (task.energyLevel === "Medium") {
               tagColor = "bg-yellow-50 text-yellow-800";
               accentLeft = "border-l-4 border-l-yellow-500";
+              boltColor = "text-yellow-600";
             } else if (task.energyLevel === "Low") {
-              tagColor = "bg-emerald-50 text-emerald-850";
+              tagColor = "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200/40 dark:border-emerald-500/10";
               accentLeft = "border-l-4 border-l-emerald-500";
+              boltColor = "text-emerald-600 dark:text-emerald-400";
             }
 
             const isComp = task.completed;
@@ -483,7 +524,15 @@ export default function TasksScreen({ tasks, setTasks }: TasksScreenProps) {
                         </span>
                       </div>
                       
-                      <div className="flex gap-2.5 shrink-0">
+                      <div className="flex gap-2 shrink-0">
+                        {/* Add to Schedule Action Button */}
+                        <button 
+                          onClick={() => startAddToScheduleWorkflow(task)}
+                          className="p-1.5 rounded-full hover:bg-slate-100 text-[#006591] transition-colors cursor-pointer"
+                          title="Schedule Task Node"
+                        >
+                          <PlusCircle className="w-3.5 h-3.5" />
+                        </button>
                         {/* Custom Edit Action Icon Button */}
                         <button 
                           onClick={() => startEditMode(task)}
@@ -515,7 +564,7 @@ export default function TasksScreen({ tasks, setTasks }: TasksScreenProps) {
 
                     <div className="flex flex-wrap items-center gap-3 mt-3">
                       <div className={`flex items-center gap-1 px-2.5 py-0.5 rounded-full ${tagColor}`}>
-                        <Bolt className="w-3 h-3 fill-current text-orange-600 shrink-0" />
+                        <Bolt className={`w-3 h-3 fill-current ${boltColor} shrink-0`} />
                         <span className="text-[9px] font-black tracking-wider uppercase">
                           {task.energyBudget || task.energyLevel} Energy
                         </span>
@@ -551,6 +600,136 @@ export default function TasksScreen({ tasks, setTasks }: TasksScreenProps) {
           "Simplify your list, simplify your days."
         </p>
       </div>
+
+      {/* Dynamic Modal confirmation for adding a Task entry to the Schedule view */}
+      {showAddToScheduleModal && selectedTaskToSchedule && (
+        <div className="fixed inset-0 z-55 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 select-none">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-slate-100 space-y-4 animate-scale-up">
+            <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+              <h3 className="text-base font-black text-on-surface flex items-center gap-2">
+                <Calendar className="w-5 h-5 text-[#006591]" />
+                <span>Schedule Entry Configuration</span>
+              </h3>
+              <button 
+                onClick={() => {
+                  setShowAddToScheduleModal(false);
+                  setSelectedTaskToSchedule(null);
+                }}
+                className="p-1 rounded-full hover:bg-slate-100 text-slate-500 whitespace-nowrap"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-[11.5px] text-outline leading-normal font-semibold">
+              Review and adjust details before pinning this task as an active session node on your Schedule page.
+            </p>
+
+            <div className="space-y-3.5 pt-1 text-left">
+              <div>
+                <label className="text-[10px] font-black uppercase text-outline tracking-wider block mb-1">
+                  Schedule Title
+                </label>
+                <input 
+                  type="text" 
+                  value={scheduleTitle}
+                  onChange={(e) => setScheduleTitle(e.target.value)}
+                  className="w-full px-3 py-2 text-xs font-semibold rounded-xl border border-slate-200 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                  placeholder="Schedule block title"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-black uppercase text-outline tracking-wider block mb-1">
+                    Start Time
+                  </label>
+                  <input 
+                    type="text" 
+                    value={scheduleStartTime}
+                    onChange={(e) => setScheduleStartTime(e.target.value)}
+                    className="w-full px-3 py-2 text-xs font-semibold rounded-xl border border-slate-200 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                    placeholder="e.g. 09:30 AM"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-black uppercase text-outline tracking-wider block mb-1">
+                    End Time
+                  </label>
+                  <input 
+                    type="text" 
+                    value={scheduleEndTime}
+                    onChange={(e) => setScheduleEndTime(e.target.value)}
+                    className="w-full px-3 py-2 text-xs font-semibold rounded-xl border border-slate-200 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                    placeholder="e.g. 11:00 AM"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-black uppercase text-outline tracking-wider block mb-1">
+                    Energy Level
+                  </label>
+                  <select
+                    value={scheduleEnergy}
+                    onChange={(e) => setScheduleEnergy(e.target.value as any)}
+                    className="w-full px-3 py-2 text-xs font-semibold rounded-xl border border-slate-200 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary bg-white cursor-pointer"
+                  >
+                    <option value="High">High Energy</option>
+                    <option value="Medium">Medium Energy</option>
+                    <option value="Low">Low Energy</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] font-black uppercase text-outline tracking-wider block mb-1">
+                    Target Date
+                  </label>
+                  <input 
+                    type="date" 
+                    value={scheduleDate}
+                    onChange={(e) => setScheduleDate(e.target.value)}
+                    className="w-full px-3 py-2 text-xs font-semibold rounded-xl border border-slate-200 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black uppercase text-outline tracking-wider block mb-1">
+                  Schedule Emoji Symbol
+                </label>
+                <input 
+                  type="text" 
+                  value={scheduleEmoji}
+                  onChange={(e) => setScheduleEmoji(e.target.value)}
+                  className="w-full px-3 py-2 text-xs font-semibold rounded-xl border border-slate-200 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                  placeholder="e.g. 🎯"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2.5 pt-4 border-t border-slate-100">
+              <button 
+                type="button"
+                onClick={() => {
+                  setShowAddToScheduleModal(false);
+                  setSelectedTaskToSchedule(null);
+                }}
+                className="px-4 py-2 text-xs font-bold text-outline rounded-xl hover:bg-slate-100 transition-colors uppercase tracking-wider"
+              >
+                Cancel
+              </button>
+              <button 
+                type="button"
+                onClick={handleConfirmAddToSchedule}
+                className="px-4 py-2 text-xs font-black text-white bg-primary hover:opacity-95 rounded-xl transition-all shadow-md uppercase tracking-wider cursor-pointer"
+              >
+                Confirm Add
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

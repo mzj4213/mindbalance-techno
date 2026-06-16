@@ -6,7 +6,7 @@ import ScheduleScreen from './components/ScheduleScreen';
 import TasksScreen from './components/TasksScreen';
 import MoodScreen from './components/MoodScreen';
 import ProfileScreen from './components/ProfileScreen';
-import { User, MoodType, ScheduleItem, TaskItem } from './types';
+import { User, MoodType, ScheduleItem, TaskItem, MoodCheckInEntry } from './types';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -20,6 +20,10 @@ export default function App() {
   const [moodIntensity, setMoodIntensity] = useState<number>(65);
 
   const [focusStreak, setFocusStreak] = useState<number>(3); // initial streak
+
+  // Globally synchronized Energy Reserves and Heart Rate
+  const [energyReserves, setEnergyReserves] = useState<number>(88);
+  const [heartRate, setHeartRate] = useState<number>(72);
 
   // Lifted Schedule Items (synchronized for Cognitive Load and Burnout Risk analytics)
   const [scheduleItems, setScheduleItems] = useState<ScheduleItem[]>([
@@ -90,24 +94,38 @@ export default function App() {
   ]);
 
   // Lifted Mood Check-Ins (May 28 to Jun 3) with real intensity values. Days without data are omitted (value 0).
-  const [moodCheckIns, setMoodCheckIns] = useState<Record<string, number>>({
-    '2026-05-28': 45,
-    '2026-05-30': 75,
-    '2026-06-01': 50,
-    '2026-06-02': 80,
-    '2026-06-03': 65 // Today
+  const [moodCheckIns, setMoodCheckIns] = useState<Record<string, MoodCheckInEntry[]>>({
+    '2026-05-28': [{ value: 45, time: '09:30 AM', date: '2026-05-28' }],
+    '2026-05-30': [{ value: 75, time: '01:15 PM', date: '2026-05-30' }],
+    '2026-06-01': [{ value: 50, time: '10:00 AM', date: '2026-06-01' }],
+    '2026-06-02': [{ value: 80, time: '04:30 PM', date: '2026-06-02' }],
+    '2026-06-03': [{ value: 65, time: '02:45 PM', date: '2026-06-03' }]
   });
+
+  // Heart rate flutter and Energy Reserves calculation
+  useEffect(() => {
+    const handle = setInterval(() => {
+      const val = 71 + Math.floor(Math.random() * 5);
+      setHeartRate(val);
+    }, 4500);
+    return () => clearInterval(handle);
+  }, []);
+
+  useEffect(() => {
+    // Dynamic Energy Reserves score based on 7.5 sleep hours and heart rate
+    const score = Math.min(100, Math.max(10, Math.round((7.5 / 8.0) * 40 + (100 - heartRate) * 1.8)));
+    setEnergyReserves(score);
+  }, [heartRate]);
 
   // Automatically compute and sync cognitive load based on currently scheduled items for the active date (default Oct 23, 2026)
   useEffect(() => {
-    const activeDateItems = scheduleItems.filter(item => item.date === "2026-10-23" && !item.completed);
-    let totalLoad = 0;
-    activeDateItems.forEach(item => {
-      if (item.energyLevel === 'High') totalLoad += 30;
-      else if (item.energyLevel === 'Medium') totalLoad += 15;
-      else if (item.energyLevel === 'Low') totalLoad += 5;
-    });
-    setCognitiveLoad(Math.min(100, Math.max(10, totalLoad)));
+    const activeDateItems = scheduleItems.filter(item => item.date === "2026-10-23");
+    const scheduleFullness = Math.min(100, activeDateItems.reduce((acc, item) => {
+      if (item.energyLevel === 'High') return acc + 35;
+      if (item.energyLevel === 'Medium') return acc + 20;
+      return acc + 10;
+    }, 0));
+    setCognitiveLoad(scheduleFullness);
   }, [scheduleItems]);
 
   // Auto-restore previous user session if logged in
@@ -126,6 +144,11 @@ export default function App() {
     }, 1200);
     return () => clearTimeout(timer);
   }, []);
+
+  const handleUpdateUser = (updated: User) => {
+    setCurrentUser(updated);
+    localStorage.setItem('mb_active_session', JSON.stringify(updated));
+  };
 
   const handleLoginSuccess = (user: User) => {
     setCurrentUser(user);
@@ -170,28 +193,14 @@ export default function App() {
             </div>
           </div>
 
-          <div className="flex items-center gap-3 px-2 py-3 border-t border-b border-outline-variant/10">
-            <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-primary-container/20 shrink-0">
-              <img 
-                alt={currentUser.fullName} 
-                src={currentUser.avatarUrl} 
-                className="w-full h-full object-cover" 
-              />
-            </div>
-            <div className="overflow-hidden">
-              <h2 className="text-xs font-black text-on-surface truncate select-all">{currentUser.fullName}</h2>
-              <p className="text-[10px] font-bold text-outline uppercase tracking-wider truncate">{currentUser.role || 'Zen Mind'}</p>
-            </div>
-          </div>
-
           {/* Sidebar Navigation */}
           <div className="space-y-1 pt-2">
             {[
               { id: 'home', label: 'Dashboard', icon: Home },
-              { id: 'schedule', label: 'Zen Schedule', icon: Calendar },
-              { id: 'tasks', label: 'Intentions', icon: CheckSquare },
-              { id: 'mood', label: 'Mood Log', icon: TrendingUp },
-              { id: 'profile', label: 'Preferences', icon: UserIcon },
+              { id: 'schedule', label: 'Schedule', icon: Calendar },
+              { id: 'tasks', label: 'Tasks', icon: CheckSquare },
+              { id: 'mood', label: 'Mood', icon: TrendingUp },
+              { id: 'profile', label: 'Profile', icon: UserIcon },
             ].map((item) => {
               const Icon = item.icon;
               const active = activeTab === item.id;
@@ -214,17 +223,29 @@ export default function App() {
         </div>
 
         <div className="space-y-4">
-          {/* Notifications bell inline in Sidebar for desktop */}
-          <button 
-            onClick={() => alert(`MindBalance Sandbox v1.0 connected securely. User: ${currentUser.email}`)}
-            className="flex items-center justify-between w-full p-3.5 rounded-xl bg-slate-50 border border-slate-200/40 text-left text-[11px] font-bold text-on-surface-variant hover:bg-slate-100/85 transition-colors cursor-pointer"
-          >
-            <div className="flex items-center gap-2">
-              <Bell className="w-4 h-4 text-primary" />
-              <span>Sandbox Alerts</span>
+          <div className="flex items-center gap-3 px-2 py-3 border-t border-b border-outline-variant/10">
+            <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-primary-container/20 shrink-0">
+              <img 
+                alt={currentUser.fullName} 
+                src={currentUser.avatarUrl} 
+                className="w-full h-full object-cover" 
+              />
             </div>
-            <span className="w-2 h-2 bg-[#8455ef] rounded-full animate-pulse" />
-          </button>
+            <div className="overflow-hidden">
+              <h2 className="text-xs font-black text-on-surface truncate select-all">{currentUser.fullName}</h2>
+              <p className="text-[10px] font-bold text-outline uppercase tracking-wider truncate">
+                {currentUser.role || 'Zen Mind'} • <span className="text-primary font-black uppercase">{currentUser.tier || 'freemium'}</span>
+              </p>
+            </div>
+          </div>
+
+          <div className="px-3 py-2 bg-slate-50 border border-slate-100 rounded-xl text-center">
+            <p className="text-[9px] font-black text-outline uppercase">Current Plan</p>
+            <p className="text-xs font-black text-primary capitalize mt-0.5">
+              {currentUser.tier === 'freemium' ? 'Student Trial (RM 0)' :
+               currentUser.tier === 'student' ? 'Student Plan (RM 10)' : 'Professional Plan (RM 30)'}
+            </p>
+          </div>
 
           <button
             onClick={handleLogout}
@@ -248,7 +269,7 @@ export default function App() {
           <div>
             {activeTab === 'home' ? (
               <h1 className="text-xs font-black text-primary uppercase tracking-wider select-all">
-                Good morning
+                Good morning • <span className="uppercase text-[9px] font-black bg-sky-50 text-sky-700 px-1.5 py-0.5 rounded">{currentUser.tier}</span>
               </h1>
             ) : (
               <h1 className="text-xs font-black text-primary capitalize select-all">
@@ -260,7 +281,7 @@ export default function App() {
 
         {/* Real-time sync alert dot */}
         <button 
-          onClick={() => alert(`MindBalance Sandbox v1.0 connected securely. User: ${currentUser.email}`)}
+          onClick={() => alert(`MindBalance Sandbox v1.0 connected securely. User: ${currentUser.email}, Tier: ${currentUser.tier}`)}
           className="w-9 h-9 flex items-center justify-center rounded-full bg-surface-container-high/65 text-primary hover:opacity-85 transition-opacity cursor-pointer relative"
         >
           <Bell className="w-4 h-4 text-primary" />
@@ -278,23 +299,32 @@ export default function App() {
           <div className="hidden md:flex justify-between items-center mb-8 border-b border-outline-variant/10 pb-4 select-none">
             <div>
               <span className="text-[10px] font-black uppercase text-outline tracking-widest block mb-0.5">MindBalance Workspace</span>
-              <h1 className="text-2xl font-black text-on-surface capitalize tracking-tight select-all">
-                {activeTab === 'home' ? `Welcome back, ${currentUser.fullName.split(' ')[0]}` : activeTab}
-              </h1>
+              <div className="flex items-center gap-2">
+                <h1 className="text-2xl font-black text-on-surface capitalize tracking-tight select-all">
+                  {activeTab === 'home' ? `Welcome back, ${currentUser.fullName.split(' ')[0]}` : activeTab}
+                </h1>
+                <span className="text-[10px] font-black text-[#006591] bg-sky-100 rounded-lg px-2.5 py-1 uppercase border border-[#006591]/10">
+                  {currentUser.tier === 'freemium' ? 'Student Trial' :
+                   currentUser.tier === 'student' ? 'Student Plan' : 'Professional Plan'}
+                </span>
+              </div>
             </div>
-            <div className="flex items-center gap-3">
-              <span className="text-xs font-bold text-outline bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200/30">
-                Cognitive Load: <strong className="text-primary">{cognitiveLoad}%</strong>
-              </span>
-              <span className="text-xs font-bold text-outline bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200/30">
-                Reserves: <strong className="text-emerald-600">Optimal ({100 - stressLevel}%)</strong>
-              </span>
-            </div>
+            {activeTab !== 'profile' && (
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-bold text-outline bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200/30 font-sans">
+                  Cognitive Load: <strong className="text-primary">{cognitiveLoad}%</strong>
+                </span>
+                <span className="text-xs font-bold text-outline bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200/30 font-sans">
+                  Energy Reserves: <strong className="text-emerald-600">{energyReserves}%</strong>
+                </span>
+              </div>
+            )}
           </div>
 
           {activeTab === 'home' && (
             <HomeScreen 
               user={currentUser} 
+              onUpdateUser={handleUpdateUser}
               onSelectTab={setActiveTab}
               cognitiveLoad={cognitiveLoad}
               setCognitiveLoad={setCognitiveLoad}
@@ -307,6 +337,7 @@ export default function App() {
               scheduleItems={scheduleItems}
               moodCheckIns={moodCheckIns}
               setMoodCheckIns={setMoodCheckIns}
+              tasks={tasks}
             />
           )}
           {activeTab === 'schedule' && (
@@ -321,27 +352,36 @@ export default function App() {
             <TasksScreen 
               tasks={tasks}
               setTasks={setTasks}
+              scheduleItems={scheduleItems}
+              setScheduleItems={setScheduleItems}
             />
           )}
           {activeTab === 'mood' && (
             <MoodScreen 
+              user={currentUser}
+              onUpdateUser={handleUpdateUser}
               currentMood={currentMood}
               moodIntensity={moodIntensity}
               moodCheckIns={moodCheckIns}
               setMoodCheckIns={setMoodCheckIns}
+              heartRate={heartRate}
+              energyReserves={energyReserves}
             />
           )}
           {activeTab === 'profile' && (
             <ProfileScreen 
               user={currentUser} 
+              onUpdateUser={handleUpdateUser}
               onLogout={handleLogout} 
               cognitiveLoad={cognitiveLoad}
+              energyReserves={energyReserves}
               scheduleItems={scheduleItems}
               focusStreak={focusStreak}
               setFocusStreak={setFocusStreak}
               setScheduleItems={setScheduleItems}
               setTasks={setTasks}
               setMoodCheckIns={setMoodCheckIns}
+              tasks={tasks}
             />
           )}
         </main>

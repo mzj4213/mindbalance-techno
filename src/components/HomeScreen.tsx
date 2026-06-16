@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { Sparkles, Play, Activity, Calendar, ArrowRight, Smile, Meh, Frown, Compass, Check, AlertCircle, RefreshCw, Smartphone, Heart } from 'lucide-react';
-import { User, MoodType, ScheduleItem } from '../types';
+import { Sparkles, Play, Activity, Calendar, ArrowRight, Smile, Meh, Frown, Compass, Check, AlertCircle, RefreshCw, Smartphone, Heart, X } from 'lucide-react';
+import { User, MoodType, ScheduleItem, TaskItem, MoodCheckInEntry } from '../types';
 
 interface HomeScreenProps {
   user: User;
+  onUpdateUser: (updated: User) => void;
   onSelectTab: (tab: string) => void;
   cognitiveLoad: number;
   setCognitiveLoad: (val: number) => void;
@@ -14,12 +15,14 @@ interface HomeScreenProps {
   moodIntensity: number;
   setMoodIntensity: (val: number) => void;
   scheduleItems: ScheduleItem[];
-  moodCheckIns: Record<string, number>;
-  setMoodCheckIns: React.Dispatch<React.SetStateAction<Record<string, number>>>;
+  moodCheckIns: Record<string, MoodCheckInEntry[]>;
+  setMoodCheckIns: React.Dispatch<React.SetStateAction<Record<string, MoodCheckInEntry[]>>>;
+  tasks: TaskItem[];
 }
 
 export default function HomeScreen({
   user,
+  onUpdateUser,
   onSelectTab,
   cognitiveLoad,
   setCognitiveLoad,
@@ -31,12 +34,95 @@ export default function HomeScreen({
   setMoodIntensity,
   scheduleItems,
   moodCheckIns,
-  setMoodCheckIns
+  setMoodCheckIns,
+  tasks
 }: HomeScreenProps) {
   const [journalText, setJournalText] = useState('');
   const [analyzing, setAnalyzing] = useState(false);
   const [aiMessage, setAiMessage] = useState<string | null>(null);
   const [checkInSuccess, setCheckInSuccess] = useState(false);
+
+  // Find completed tasks and compute focus hour total
+  const completedTasks = tasks.filter(t => t.completed);
+  
+  const parseFocusDuration = (duration: string): number => {
+    if (!duration) return 0;
+    const hourMatch = duration.match(/(\d+(?:\.\d+)?)\s*h/i);
+    if (hourMatch) return parseFloat(hourMatch[1]);
+    
+    const minMatch = duration.match(/(\d+)\s*m/i);
+    if (minMatch) return parseInt(minMatch[1], 10) / 60;
+    
+    const matchHoursText = duration.toLowerCase().match(/(\d+(?:\.\d+)?)\s*hour/);
+    if (matchHoursText) return parseFloat(matchHoursText[1]);
+    
+    const matchMinsText = duration.toLowerCase().match(/(\d+)\s*min/);
+    if (matchMinsText) return parseInt(matchMinsText[1], 10) / 60;
+    
+    const rawNumMatch = duration.match(/^(\d+(?:\.\d+)?)$/);
+    if (rawNumMatch) return parseFloat(rawNumMatch[1]);
+    
+    return 0;
+  };
+
+  const totalFocusHours = completedTasks.reduce((acc, t) => {
+    return acc + parseFocusDuration(t.focusDuration);
+  }, 0);
+
+  const formattedHoursValue = Number(totalFocusHours.toFixed(2));
+
+  // Daily Score Calculation logic (from ProfileScreen)
+  const tasksDone = tasks.filter(t => t.completed).length;
+  
+  const parseTimeToMinutes = (timeStr: string) => {
+    if (!timeStr) return 0;
+    const match = timeStr.match(/(\d+):(\d+)\s*(AM|PM)/i);
+    if (!match) return 0;
+    
+    let [_, hours, minutes, ampm] = match;
+    let h = parseInt(hours, 10);
+    const m = parseInt(minutes, 10);
+    
+    if (ampm.toUpperCase() === 'PM' && h !== 12) h += 12;
+    if (ampm.toUpperCase() === 'AM' && h === 12) h = 0;
+    
+    return h * 60 + m;
+  };
+
+  const calculateFocusHours = (onlyCompleted: boolean) => {
+    let totalMinutes = 0;
+    scheduleItems.forEach(item => {
+      if (!onlyCompleted || item.completed) {
+        const start = parseTimeToMinutes(item.startTime);
+        const end = parseTimeToMinutes(item.endTime);
+        let diff = 0;
+        if (end > start) {
+          diff = end - start;
+        } else if (end < start) {
+          diff = (1440 - start) + end;
+        }
+        totalMinutes += diff;
+      }
+    });
+    return Number((totalMinutes / 60).toFixed(1));
+  };
+
+  const completedFocusHours = calculateFocusHours(true);
+  const totalFocusHoursScheduled = calculateFocusHours(false);
+
+  // Dynamic Daily Score: 25 points per tasksDone, 20 points per completedFocusHours, always caps nicely at 100%
+  const generatedDailyScore = Math.min(100, Math.round(
+    (tasksDone * 25) + 
+    (completedFocusHours * 20) + 
+    (totalFocusHoursScheduled > 0 ? 5 : 0)
+  ));
+  
+  // Premium upsell and locks states
+  const [showBillingNotice, setShowBillingNotice] = useState<string | null>(null);
+  const [cheeredPeers, setCheeredPeers] = useState<string[]>([]);
+  const [coachingInput, setCoachingInput] = useState('');
+  const [coachingResponse, setCoachingResponse] = useState<string | null>(null);
+  const [coachingLoading, setCoachingLoading] = useState(false);
 
   // Breathing Recovery Mode state
   const [recoveryActive, setRecoveryActive] = useState(false);
@@ -232,11 +318,51 @@ export default function HomeScreen({
             <div className="pt-2">
               <button
                 onClick={() => {
+                  const loggedCount = user.moodLogCountToday || 0;
+                  if (user.tier === 'freemium' && loggedCount >= 3) {
+                    setShowBillingNotice('mood_limit');
+                    return;
+                  }
+
                   // Record Check-In in the lifted moodCheckIns state
-                  setMoodCheckIns(prev => ({
-                    ...prev,
-                    '2026-06-03': moodIntensity
-                  }));
+                  let finalVal = 50; // default Okay
+                  if (currentMood === 'Sad') {
+                    finalVal = Math.round((moodIntensity / 100) * 45);
+                  } else if (currentMood === 'Okay') {
+                    finalVal = Math.round(46 + (moodIntensity / 100) * 9);
+                  } else if (currentMood === 'Good') {
+                    finalVal = Math.round(56 + (moodIntensity / 100) * 14);
+                  } else if (currentMood === 'Focused') {
+                    finalVal = Math.round(71 + (moodIntensity / 100) * 14);
+                  } else if (currentMood === 'Energized') {
+                    finalVal = Math.round(86 + (moodIntensity / 100) * 14);
+                  }
+
+                  const today = new Date();
+                  const yearStr = today.getFullYear();
+                  const monthStr = String(today.getMonth() + 1).padStart(2, '0');
+                  const dayStr = String(today.getDate()).padStart(2, '0');
+                  const dateKey = `${yearStr}-${monthStr}-${dayStr}`;
+
+                  let hours = today.getHours();
+                  const minutes = String(today.getMinutes()).padStart(2, '0');
+                  const ampm = hours >= 12 ? 'PM' : 'AM';
+                  const displayHours = hours % 12 || 12;
+                  const timeStr = `${displayHours}:${minutes} ${ampm}`;
+
+                  const newEntry: MoodCheckInEntry = {
+                    value: finalVal,
+                    time: timeStr,
+                    date: dateKey
+                  };
+
+                  setMoodCheckIns(prev => {
+                    const currentList = prev[dateKey] || [];
+                    return {
+                      ...prev,
+                      [dateKey]: [...currentList, newEntry]
+                    };
+                  });
                   
                   // Dynamically adjust Stress Level based on selected emotion
                   if (currentMood === 'Sad') setStressLevel(65);
@@ -244,6 +370,12 @@ export default function HomeScreen({
                   else if (currentMood === 'Good') setStressLevel(35);
                   else if (currentMood === 'Focused') setStressLevel(25);
                   else if (currentMood === 'Energized') setStressLevel(20);
+
+                  // Update logged quota
+                  onUpdateUser({
+                    ...user,
+                    moodLogCountToday: loggedCount + 1
+                  });
 
                   setCheckInSuccess(true);
                   setTimeout(() => setCheckInSuccess(false), 3500);
@@ -267,7 +399,175 @@ export default function HomeScreen({
                   Trend data recorded. Visual metrics updated in analytics.
                 </p>
               )}
+              {user.tier === 'freemium' && (
+                <div className="mt-3 bg-slate-50 border border-slate-100 rounded-xl p-2.5 text-center">
+                  <p className="text-[10px] font-bold text-outline uppercase tracking-wider">
+                    Freemium Tier Limits
+                  </p>
+                  <p className="text-[11px] font-extrabold text-primary mt-0.5">
+                    {user.moodLogCountToday || 0} / 3 daily mood logs recorded today
+                  </p>
+                </div>
+              )}
             </div>
+          </section>
+
+          {/* AI Restorative Coaching Hub (Professional Plan Feature) */}
+          <section className="glass-card rounded-3xl p-6 space-y-4 relative overflow-hidden">
+            <div className="flex justify-between items-start">
+              <div>
+                <span className="text-[10px] tracking-widest text-emerald-600 font-extrabold uppercase block">Professional Sync</span>
+                <h3 className="text-base font-black text-on-surface mt-0.5">AI Coaching Hub</h3>
+              </div>
+              <span className="text-[9.5px] bg-emerald-50 text-emerald-700 font-extrabold uppercase px-2 py-0.5 rounded-full select-none">
+                AI Assistant
+              </span>
+            </div>
+
+            {user.tier !== 'professional' ? (
+              <div className="absolute inset-0 bg-slate-50/95 backdrop-blur-[2px] p-6 flex flex-col justify-center items-center text-center space-y-3 z-10 selection:bg-transparent">
+                <span className="text-lg">🔒</span>
+                <h4 className="text-sm font-black text-on-surface">AI Coaching Hub Locked</h4>
+                <p className="text-[11px] text-outline max-w-sm leading-relaxed">
+                  Get real-time restorative coaching, predictive stress mitigation suggestions, and specialized physical energy budgets matching your tasks. Placed with RM 30 Working Professional plan.
+                </p>
+                <button 
+                  onClick={() => onSelectTab('profile')}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-md transition-all cursor-pointer"
+                >
+                  Upgrade to Professional Plan
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-4 select-none">
+                <p className="text-xs text-outline leading-tight">
+                  Brief your coach about any overwhelming deadlines, and receive personalized pacing suggestions instantly.
+                </p>
+                <div className="space-y-2">
+                  <textarea
+                    value={coachingInput}
+                    onChange={(e) => setCoachingInput(e.target.value)}
+                    placeholder="e.g., I have 3 exam design reviews today and feel highly fatigued..."
+                    className="w-full h-20 p-3 bg-white border border-slate-200 rounded-xl text-xs text-on-surface focus:ring-1 focus:ring-emerald-500 focus:outline-none placeholder-slate-400"
+                  />
+                  <button
+                    onClick={() => {
+                      if (!coachingInput.trim()) return;
+                      setCoachingLoading(true);
+                      setCoachingResponse(null);
+                      setTimeout(() => {
+                        setCoachingLoading(false);
+                        setCoachingResponse("Restorative Coach Suggestions: Your Cognitive Load is high! I suggest completing UX reviews first inside 25m focus blocks, and spacing segments with 5m breathing pacing loops. Restrict peripheral devices usage.");
+                      }, 1800);
+                    }}
+                    disabled={coachingLoading}
+                    className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+                  >
+                    {coachingLoading ? 'Consulting Coach...' : 'Seek Coach Council'}
+                  </button>
+                </div>
+
+                {coachingResponse && (
+                  <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4 animate-fade-in">
+                    <p className="text-[11.5px] text-emerald-800 leading-relaxed font-semibold italic">
+                      {coachingResponse}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+          </section>
+
+          {/* Tangible Wins Dashboard (Student & Professional Feature) */}
+          <section className="glass-card rounded-3xl p-6 space-y-4 relative overflow-hidden">
+            <div className="flex justify-between items-start">
+              <div>
+                <h3 className="text-base font-black text-on-surface">Tangible Wins Dashboard</h3>
+              </div>
+              <span className="text-[9.5px] bg-indigo-50 text-indigo-700 font-extrabold uppercase px-2 py-0.5 rounded-full select-none">
+                Achievements
+              </span>
+            </div>
+
+            {user.tier === 'freemium' ? (
+              <div className="absolute inset-0 bg-slate-50/95 backdrop-blur-[2px] p-6 flex flex-col justify-center items-center text-center space-y-3 z-10 select-none">
+                <span className="text-lg">🔒</span>
+                <h4 className="text-sm font-black text-on-surface">Tangible Wins Locked</h4>
+                <p className="text-[11px] text-outline max-w-sm leading-relaxed">
+                  Earn points, complete daily balanced streaks, and track historic focus achievements! Unlocks on Student (RM 10) and Working Professional tiers.
+                </p>
+                <button 
+                  onClick={() => onSelectTab('profile')}
+                  className="px-4 py-2 bg-[#8455ef] hover:bg-[#7244de] text-white rounded-xl text-xs font-bold shadow-md transition-all cursor-pointer"
+                >
+                  Upgrade to Student Plan
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-4 select-none">
+                <div className="grid grid-cols-2 gap-4 text-xs">
+                  <div className="p-4 bg-white border border-slate-100 rounded-2xl flex flex-col justify-between h-24 hover:border-slate-200 transition-colors">
+                    <span className="text-[9.5px] text-purple-700 dark:text-purple-400 uppercase font-black tracking-wider block">Finished Tasks</span>
+                    <div>
+                      <span className="text-2xl font-black text-purple-900 dark:text-purple-300 block">{completedTasks.length}</span>
+                      <p className="text-[10px] text-outline mt-0.5 leading-none">Completed focus goals.</p>
+                    </div>
+                  </div>
+                  <div className="p-4 bg-white border border-slate-100 rounded-2xl flex flex-col justify-between h-24 hover:border-slate-200 transition-colors">
+                    <span className="text-[9.5px] text-sky-700 dark:text-sky-400 uppercase font-black tracking-wider block">Recorded Run Time</span>
+                    <div>
+                      <span className="text-2xl font-black text-primary dark:text-sky-300 block">
+                        {formattedHoursValue} {formattedHoursValue === 1 ? 'hr' : 'hrs'}
+                      </span>
+                      <p className="text-[10px] text-outline mt-0.5 leading-none">Actual focus log sum.</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <h4 className="text-[10px] font-extrabold text-outline uppercase tracking-wider block mb-1">
+                    Completed Focus Record
+                  </h4>
+                  {completedTasks.length === 0 ? (
+                    <div className="py-5 px-4 bg-slate-50 border border-slate-100 rounded-2xl text-center space-y-2">
+                      <p className="text-[11px] text-outline leading-tight max-w-xs mx-auto">
+                        No completed tasks on record yet. Complete and log focus timers under tasks to see items populated here.
+                      </p>
+                      <button
+                        onClick={() => onSelectTab('tasks')}
+                        className="px-4 py-1.5 bg-primary/10 hover:bg-primary/20 text-primary text-[10px] font-black rounded-lg transition-all cursor-pointer uppercase tracking-wider"
+                      >
+                        Start Focus Tasks
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="max-h-52 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
+                      {completedTasks.map((task) => (
+                        <div 
+                          key={task.id} 
+                          className="p-3 bg-white border border-slate-100 rounded-2xl flex items-center justify-between text-xs hover:border-slate-200 transition-colors"
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="w-5 h-5 rounded-full bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 shrink-0">
+                              <Check className="w-3 h-3" />
+                            </div>
+                            <div className="min-w-0">
+                              <span className="font-bold text-on-surface block truncate max-w-[150px] md:max-w-[220px]">{task.title}</span>
+                              <span className="text-[9px] text-outline uppercase font-extrabold tracking-wider">
+                                {task.priority} • {task.classification}
+                              </span>
+                            </div>
+                          </div>
+                          <span className="text-[10px] font-black text-primary bg-primary/5 px-2 py-1 rounded-lg border border-primary/10 shrink-0">
+                            {task.focusDuration}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </section>
 
         </div>
@@ -425,11 +725,146 @@ export default function HomeScreen({
               </div>
             </div>
 
+            {/* Community Leaderboard (Resized to fit inside Right Column Bento below Up Next) */}
+            <div className="col-span-2 glass-card rounded-2xl p-5 space-y-3 relative overflow-hidden bg-white/70">
+              <div className="flex justify-between items-start">
+                <div>
+                  <h3 className="text-sm font-black text-on-surface">Community Leaderboard</h3>
+                </div>
+                <span className="text-[9px] bg-[#daf2ff] text-primary font-black uppercase px-2 py-0.5 rounded-full select-none">
+                  Weekly Rankings
+                </span>
+              </div>
+
+              {user.tier === 'freemium' ? (
+                <div className="absolute inset-0 bg-slate-50/95 backdrop-blur-[2px] p-6 flex flex-col justify-center items-center text-center space-y-2 z-10 select-none">
+                  <span className="text-base">🔒</span>
+                  <h4 className="text-xs font-black text-on-surface">Leaderboard Locked</h4>
+                  <p className="text-[10px] text-outline max-w-sm leading-relaxed">
+                    Join structural university cohorts, cheer study peers, and earn focus points in real-time. Unlocks with Student Plan (RM 10/mo) or above.
+                  </p>
+                  <button 
+                    onClick={() => onSelectTab('profile')}
+                    className="px-3.5 py-1.5 bg-[#8455ef] hover:bg-[#7244de] text-white rounded-xl text-[10px] font-bold shadow-md transition-all cursor-pointer"
+                  >
+                    Unlock Leaderboards
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-2 font-sans select-none text-[11px]">
+                  <p className="text-[10px] text-outline leading-tight">
+                    Complete focus scheduled timers to upgrade score bounds. Cheer peers to support mutual productivity.
+                  </p>
+                  
+                  <div className="space-y-2">
+                    {[
+                      { id: 'maya', name: 'Maya S.', plan: 'Student', points: 88, avatar: 'M' },
+                      { id: 'ethan', name: 'Ethan R.', plan: 'Professional', points: 74, avatar: 'E' },
+                      { id: 'you', name: 'You', plan: user.tier === 'student' ? 'Student' : 'Professional', points: generatedDailyScore, avatar: 'Y' },
+                      { id: 'sarah', name: 'Sarah L.', plan: 'Student', points: 62, avatar: 'S' }
+                    ].sort((a, b) => b.points - a.points).map((row, index) => {
+                      const isYou = row.id === 'you';
+                      const alreadyCheered = cheeredPeers.includes(row.id);
+                      return (
+                        <div 
+                          key={row.id} 
+                          className={`p-2.5 rounded-xl flex items-center justify-between border transition-all ${
+                            isYou 
+                              ? 'border-primary/20 bg-primary/5 font-bold shadow-xs' 
+                              : 'border-slate-100 bg-white'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <span className="font-extrabold text-primary text-[9px] w-3">{index + 1}</span>
+                            <div className={`w-6.5 h-6.5 rounded-full flex items-center justify-center font-black text-[10px] text-white shrink-0 ${
+                              isYou ? 'bg-primary shadow-sm' : 'bg-slate-300'
+                            }`}>
+                              {row.avatar}
+                            </div>
+                            <div>
+                              <span className="text-[11px] text-on-surface block leading-tight font-bold">{row.name}</span>
+                              <span className="text-[8px] text-outline uppercase tracking-wider font-extrabold">{row.plan} Tier</span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className="font-extrabold text-[#006591] tabular-nums text-[10px]">{row.points} Points</span>
+                            {!isYou && (
+                              <button
+                                onClick={() => {
+                                  if (alreadyCheered) return;
+                                  setCheeredPeers(prev => [...prev, row.id]);
+                                  alert(`Cheered ${row.name}! REST & Flow points boosted +25 XP to their balance.`);
+                                }}
+                                className={`h-6 px-2.5 rounded-lg text-[8.5px] font-black uppercase transition-all tracking-wider shrink-0 cursor-pointer ${
+                                  alreadyCheered 
+                                    ? 'bg-emerald-50 text-emerald-700 font-extrabold' 
+                                    : 'bg-primary/10 text-primary hover:bg-primary/20'
+                                }`}
+                              >
+                                {alreadyCheered ? '✓ Cheered' : 'Cheer'}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
           </div>
 
         </div>
 
       </div>
+
+      {/* Freemium limit warning modal */}
+      {showBillingNotice === 'mood_limit' && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 select-none animate-fade-in">
+          <div className="bg-white w-full max-w-md rounded-[2.5rem] p-6 md:p-8 space-y-6 shadow-2xl border border-slate-100 animate-scale-up">
+            <div className="flex justify-between items-start">
+              <span className="bg-amber-100 text-amber-800 text-[10px] uppercase font-black px-3 py-1 rounded-full">
+                ⚠️ Quota Limit Reached
+              </span>
+              <button 
+                onClick={() => setShowBillingNotice(null)}
+                className="p-1 rounded-full hover:bg-slate-100 cursor-pointer"
+                aria-label="Close"
+              >
+                <X className="w-5 h-5 text-slate-400" />
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              <h4 className="text-lg font-black text-on-surface">Upgrade to Unlock Full Mood Logging</h4>
+              <p className="text-xs text-outline leading-relaxed">
+                You have reached the Freemium Plan quota of <strong>3 mood check-ins</strong> today. Upgrade to the <strong>Student Plan</strong> (RM 10/mo) or <strong>Professional Plan</strong> (RM 30/mo) for unlimited logging, detailed trends, peer leaderboards, and AI coaching.
+              </p>
+            </div>
+
+            <div className="flex gap-2.5 pt-2">
+              <button
+                onClick={() => setShowBillingNotice(null)}
+                className="flex-1 py-3 text-xs bg-slate-100 hover:bg-slate-200/80 text-slate-700 font-extrabold rounded-xl transition-all cursor-pointer text-center"
+              >
+                Close
+              </button>
+              <button
+                onClick={() => {
+                  setShowBillingNotice(null);
+                  onSelectTab('profile'); // Send them to the selection widget
+                }}
+                className="flex-1 py-3 text-xs bg-[#8455ef]/90 hover:bg-[#8455ef] text-white font-extrabold rounded-xl transition-all cursor-pointer text-center shadow-lg shadow-indigo-150"
+              >
+                View Pricing Plans
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
