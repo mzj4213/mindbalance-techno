@@ -428,9 +428,9 @@ export default function TasksScreen({ tasks, setTasks, scheduleItems, setSchedul
               accentLeft = "border-l-4 border-l-yellow-500";
               boltColor = "text-yellow-600";
             } else if (task.energyLevel === "Low") {
-              tagColor = "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200/40 dark:border-emerald-500/10";
-              accentLeft = "border-l-4 border-l-emerald-500";
-              boltColor = "text-emerald-600 dark:text-emerald-400";
+              tagColor = "bg-green-100 dark:bg-green-950/40 text-green-800 dark:text-green-400 border border-green-200/40 dark:border-green-500/10";
+              accentLeft = "border-l-4 border-l-green-500";
+              boltColor = "text-green-700 dark:text-green-400";
             }
 
             const isComp = task.completed;

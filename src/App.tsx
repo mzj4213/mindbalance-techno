@@ -6,7 +6,9 @@ import ScheduleScreen from './components/ScheduleScreen';
 import TasksScreen from './components/TasksScreen';
 import MoodScreen from './components/MoodScreen';
 import ProfileScreen from './components/ProfileScreen';
+import CallbackScreen from './components/CallbackScreen';
 import { User, MoodType, ScheduleItem, TaskItem, MoodCheckInEntry } from './types';
+import { getSupabase, isSupabaseConfigured } from './lib/supabase';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -128,21 +130,100 @@ export default function App() {
     setCognitiveLoad(scheduleFullness);
   }, [scheduleItems]);
 
-  // Auto-restore previous user session if logged in
+  // Auto-restore previous user session if logged in & register change listener
   useEffect(() => {
-    const cachedUser = localStorage.getItem('mb_active_session');
-    if (cachedUser) {
-      try {
-        setCurrentUser(JSON.parse(cachedUser));
-      } catch (e) {
-        localStorage.removeItem('mb_active_session');
+    let unsubscribeSupabase: (() => void) | null = null;
+
+    const restoreSession = async () => {
+      // Try to fetch Supabase session first if configured and connected
+      if (isSupabaseConfigured()) {
+        try {
+          const sb = getSupabase();
+          if (sb) {
+            // Restore immediate active session
+            const { data: { session } } = await sb.auth.getSession();
+            if (session?.user) {
+              const { data: profile } = await sb.from('profiles').select('*').eq('id', session.user.id).single();
+              const activeUser: User = {
+                id: session.user.id,
+                email: session.user.email || '',
+                fullName: profile?.full_name || session.user.user_metadata?.full_name || 'Zen User',
+                role: profile?.role || (session.user.email === 'mzj4213@gmail.com' ? 'Product Designer' : 'Mindfulness Practitioner'),
+                avatarUrl: profile?.avatar_url || (session.user.email === 'mzj4213@gmail.com' 
+                  ? 'https://lh3.googleusercontent.com/aida-public/AB6AXuBMQI6QRQM2WRt-f3v3S9YdBc-x8RoIs5zdQBforjynBvi_7wirk6gqq0nXVhqAsORolDf1ayoXYxVQfF8x066FI8ZunaRn2lRq1yQljsvEdMRywCgfV0q2sw61An1VoNRltV2nFHFo60FfKqZOo1mS8_O5lxa4PZfqmysWa5k_GCYQxo1OlrxBDCTQ21qWDQ4T2p01UDFeMwBShzKJH3M3vifKvoYzcngLUIB1uNmFYZVLi4SpUInWfv8PKZNfxrk34sVBN_Rv2tQ'
+                  : 'https://lh3.googleusercontent.com/aida-public/AB6AXuCCN6vpkGJsWL0rn_CuT7aCl8m9xd-UyPSgMhAkgEUljpgbK_ZgY21sxEyd6ahiB6oqeyUTpQuAGGj99GpW-bvoSKujfF9sjVTKjc43N4OCh-GI6r9QgeHqKIll3c4ziTa5sY8vo3IJ8dUceq_HqdDscbeKAbFyLIdNStGtvw80mwnO97Nec2_Izo1MT7BAQp5b4g_Xy59PQb-yjeer-bdv98zIx1utRFFwF3pYNz0n4XXBGbmTjlpabw0nREHg7ECpQkHyLAsOSJ4'),
+                balanceScore: profile?.balance_score || 94,
+                focusStreak: profile?.focus_streak || 5,
+                burnoutRisk: profile?.burnout_risk || 12,
+                tier: 'freemium',
+                moodLogCountToday: 1
+              };
+              setCurrentUser(activeUser);
+              localStorage.setItem('mb_active_session', JSON.stringify(activeUser));
+              setInitialLoading(false);
+              return;
+            }
+
+            // Register global auth state change listener to synchronize with OAuth redirect callback sessions completed in popups or sub-scopes
+            const { data: { subscription } } = sb.auth.onAuthStateChange(async (event, currentSession) => {
+              if (currentSession?.user) {
+                try {
+                  const { data: profile } = await sb.from('profiles').select('*').eq('id', currentSession.user.id).single();
+                  const authUser: User = {
+                    id: currentSession.user.id,
+                    email: currentSession.user.email || '',
+                    fullName: profile?.full_name || currentSession.user.user_metadata?.full_name || 'Zen User',
+                    role: profile?.role || (currentSession.user.email === 'mzj4213@gmail.com' ? 'Product Designer' : 'Mindfulness Practitioner'),
+                    avatarUrl: profile?.avatar_url || (currentSession.user.email === 'mzj4213@gmail.com' 
+                      ? 'https://lh3.googleusercontent.com/aida-public/AB6AXuBMQI6QRQM2WRt-f3v3S9YdBc-x8RoIs5zdQBforjynBvi_7wirk6gqq0nXVhqAsORolDf1ayoXYxVQfF8x066FI8ZunaRn2lRq1yQljsvEdMRywCgfV0q2sw61An1VoNRltV2nFHFo60FfKqZOo1mS8_O5lxa4PZfqmysWa5k_GCYQxo1OlrxBDCTQ21qWDQ4T2p01UDFeMwBShzKJH3M3vifKvoYzcngLUIB1uNmFYZVLi4SpUInWfv8PKZNfxrk34sVBN_Rv2tQ'
+                      : 'https://lh3.googleusercontent.com/aida-public/AB6AXuCCN6vpkGJsWL0rn_CuT7aCl8m9xd-UyPSgMhAkgEUljpgbK_ZgY21sxEyd6ahiB6oqeyUTpQuAGGj99GpW-bvoSKujfF9sjVTKjc43N4OCh-GI6r9QgeHqKIll3c4ziTa5sY8vo3IJ8dUceq_HqdDscbeKAbFyLIdNStGtvw80mwnO97Nec2_Izo1MT7BAQp5b4g_Xy59PQb-yjeer-bdv98zIx1utRFFwF3pYNz0n4XXBGbmTjlpabw0nREHg7ECpQkHyLAsOSJ4'),
+                    balanceScore: profile?.balance_score || 94,
+                    focusStreak: profile?.focus_streak || 5,
+                    burnoutRisk: profile?.burnout_risk || 12,
+                    tier: 'freemium',
+                    moodLogCountToday: 1
+                  };
+                  setCurrentUser(authUser);
+                  localStorage.setItem('mb_active_session', JSON.stringify(authUser));
+                } catch (pErr) {
+                  console.warn("Error fetching Supabase database profile in auth state change:", pErr);
+                }
+              } else if (event === 'SIGNED_OUT') {
+                setCurrentUser(null);
+                localStorage.removeItem('mb_active_session');
+              }
+            });
+
+            unsubscribeSupabase = () => subscription.unsubscribe();
+          }
+        } catch (err) {
+          console.warn("Supabase active session auto-restore notice:", err);
+        }
       }
-    }
-    // Simulate minor peaceful load animation
-    const timer = setTimeout(() => {
-      setInitialLoading(false);
-    }, 1200);
-    return () => clearTimeout(timer);
+
+      // Fallback to LocalStorage stored cache session
+      const cachedUser = localStorage.getItem('mb_active_session');
+      if (cachedUser) {
+        try {
+          setCurrentUser(JSON.parse(cachedUser));
+        } catch (e) {
+          localStorage.removeItem('mb_active_session');
+        }
+      }
+      
+      // Simulate minor quiet peaceful loader finish
+      const timer = setTimeout(() => {
+        setInitialLoading(false);
+      }, 1000);
+    };
+
+    restoreSession();
+
+    return () => {
+      if (unsubscribeSupabase) {
+        unsubscribeSupabase();
+      }
+    };
   }, []);
 
   const handleUpdateUser = (updated: User) => {
@@ -159,7 +240,15 @@ export default function App() {
   const handleLogout = () => {
     setCurrentUser(null);
     localStorage.removeItem('mb_active_session');
+    if (isSupabaseConfigured()) {
+      getSupabase()?.auth.signOut().catch((err: any) => console.warn("Supabase sign out error:", err));
+    }
   };
+
+  const isCallbackRoute = window.location.pathname === '/auth/callback' || window.location.pathname === '/auth/callback/';
+  if (isCallbackRoute) {
+    return <CallbackScreen />;
+  }
 
   if (initialLoading) {
     return (
